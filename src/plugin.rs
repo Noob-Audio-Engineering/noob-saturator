@@ -28,14 +28,12 @@
 //! settings — which is the design Ableton themselves chose for Operator and
 //! for EQ Eight, and never applied to the device this one answers.
 
-use std::collections::BTreeMap;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use include_dir::{Dir, include_dir};
 use nih_plug::prelude::*;
-use noob_vst_webgui_framework::{Assets, AudioHandle, NoobVstWebguiFramework};
-use noob_vst_webgui_framework_nih::{EditorConfig, NoobVstWebguiFrameworkEditor, StoreSlot};
+use noob_vst_webgui_framework::Assets;
+use noob_vst_webgui_framework_nih::{EditorConfig, PluginHost, StoreSlot, UiStoreParams};
 
 use crate::dsp::{self, Processor, color, engine::Settings};
 
@@ -268,14 +266,12 @@ unsafe impl Params for NoobSaturatorParams {
         ]
     }
 
-    fn serialize_fields(&self) -> BTreeMap<String, String> {
-        let mut m = BTreeMap::new();
-        self.ui_store.serialize_into(&mut m);
-        m
-    }
+    noob_vst_webgui_framework_nih::ui_store_fields!(ui_store);
+}
 
-    fn deserialize_fields(&self, serialized: &BTreeMap<String, String>) {
-        self.ui_store.deserialize_from(serialized);
+impl UiStoreParams for NoobSaturatorParams {
+    fn ui_store(&self) -> &StoreSlot {
+        &self.ui_store
     }
 }
 
@@ -307,9 +303,7 @@ impl NoobSaturatorParams {
 /// The plug-in.
 pub struct NoobSaturator {
     params: Arc<NoobSaturatorParams>,
-    editor: Arc<NoobVstWebguiFrameworkEditor>,
-    bridge: NoobVstWebguiFramework,
-    audio: Option<AudioHandle>,
+    host: PluginHost,
     processor: Processor,
     last_latency: usize,
 }
@@ -317,9 +311,9 @@ pub struct NoobSaturator {
 impl Default for NoobSaturator {
     fn default() -> Self {
         let params = Arc::new(NoobSaturatorParams::default());
-        let (editor, bridge) = NoobVstWebguiFrameworkEditor::with_builder(
+        let host = PluginHost::new(
             "noob-saturator",
-            params.as_ref(),
+            &params,
             dsp::streams(48_000.0),
             EditorConfig::new(1000, 620)
                 .size_limits((900, 520), (7680, 4320))
@@ -339,13 +333,9 @@ impl Default for NoobSaturator {
                 }))
             },
         );
-        let audio = bridge.take_audio();
-        params.ui_store.attach(&bridge);
         NoobSaturator {
             params,
-            editor,
-            bridge,
-            audio,
+            host,
             processor: Processor::new(48_000.0),
             last_latency: usize::MAX,
         }
@@ -354,23 +344,10 @@ impl Default for NoobSaturator {
 
 impl Plugin for NoobSaturator {
     const NAME: &'static str = "Noob Saturator";
-    const VENDOR: &'static str = "Noob Audio Engineering";
-    const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
-    const EMAIL: &'static str = "";
-    const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    noob_vst_webgui_framework_nih::noob_identity!();
 
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
-        AudioIOLayout {
-            main_input_channels: NonZeroU32::new(2),
-            main_output_channels: NonZeroU32::new(2),
-            ..AudioIOLayout::const_default()
-        },
-        AudioIOLayout {
-            main_input_channels: NonZeroU32::new(1),
-            main_output_channels: NonZeroU32::new(1),
-            ..AudioIOLayout::const_default()
-        },
-    ];
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] =
+        noob_vst_webgui_framework_nih::stereo_or_mono_io!();
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = false;
 
@@ -382,7 +359,7 @@ impl Plugin for NoobSaturator {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        Some(Box::new(self.editor.handle()))
+        Some(self.host.editor())
     }
 
     fn initialize(
@@ -396,7 +373,7 @@ impl Plugin for NoobSaturator {
         self.last_latency = self.processor.latency();
         // Unconditional, at the host's rate, whatever the settings are.
         context.set_latency_samples(self.last_latency as u32);
-        self.bridge.send_json(
+        self.host.bridge().send_json(
             "sample_rate",
             serde_json::json!({ "sample_rate": buffer_config.sample_rate }),
         );
@@ -433,7 +410,7 @@ impl Plugin for NoobSaturator {
             r[..n].copy_from_slice(&l[..n]);
             self.processor.process(&mut l[..n], &mut r[..n]);
         }
-        if let Some(audio) = self.audio.as_mut() {
+        if let Some(audio) = self.host.audio() {
             self.processor.publish(audio);
         }
         ProcessStatus::Normal

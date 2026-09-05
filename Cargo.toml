@@ -30,6 +30,7 @@ default = []
 # `web/dist`, so run `npm run build` in `web/` first). Without it the crate is
 # just the DSP plus the standalone dev server.
 plugin = ["dep:nih_plug", "dep:noob-vst-webgui-framework-nih", "dep:include_dir"]
+hostapp = ["plugin", "nih_plug/standalone"]
 
 [dependencies]
 noob-vst-webgui-framework = { git = "https://github.com/Noob-Audio-Engineering/noob-vst-webgui-framework" }
@@ -55,3 +56,9 @@ codegen-units = 1
 # plug-in repository carries this line.
 [patch."https://github.com/robbert-vdh/nih-plug.git"]
 nih_plug = { git = "https://github.com/Noob-Audio-Engineering/nih-plug.git", branch = "host-resize" }
+
+
+[[bin]]
+name = "noob-saturator-host"
+path = "src/bin/host.rs"
+required-features = ["hostapp"]
