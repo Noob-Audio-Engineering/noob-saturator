@@ -41,7 +41,7 @@ const range = computed(() => {
     const m = getClient().stream('transfer').meta || {};
     if (Array.isArray(m.in_range) && m.in_range.length === 2) return m.in_range;
   }
-  return [-1, 1];
+  return [-1.5, 1.5];
 });
 
 /** The curve as `y` values over `range`: the engine's, or this page's own while there is no engine. */
@@ -49,13 +49,13 @@ const points = computed(() => {
   if (transfer.value && transfer.value.length > 1) return transfer.value;
   const f = transferAt(sat.shape.value, {
     driveDb: sat.drive ? sat.drive.plain : 0,
-    bias: sat.bias ? sat.bias.plain : 0,
+    biasPct: sat.bias ? sat.bias.plain : 0,
     outputDb: sat.output ? sat.output.plain : 0,
     clipMode: sat.clipMode ? sat.clipMode.index : 0,
-    knee: sat.clipKnee ? sat.clipKnee.plain : 0.5,
+    kneeDb: sat.clipKnee ? sat.clipKnee.plain : 6,
   });
   const [lo, hi] = range.value;
-  const n = 257;
+  const n = 256;
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) out[i] = f(lo + ((hi - lo) * i) / (n - 1));
   return out;
@@ -201,9 +201,10 @@ function draw() {
     dot(-band);
   }
 
-  // Axis captions and the four ends. The plot is the unit square, so ±1 is
-  // its own border and needs naming rather than marking: full scale in, full
-  // scale out, and every curve's ceiling.
+  // Axis captions, the range ends, and the ceiling marked at ±1. With the
+  // frame wider than the ceiling, ±1 is a line inside the picture rather than
+  // its border, and it is the number worth having: it is where five of the six
+  // curves flatten and where the sixth turns over.
   g.fillStyle = dim;
   g.font = '9px ui-monospace, Consolas, monospace';
   g.textBaseline = 'alphabetic';
@@ -213,10 +214,20 @@ function draw() {
   g.rotate(-Math.PI / 2);
   g.fillText('out', -18, 0);
   g.restore();
-  g.fillText('+1', x0 + side - 15, py(0) + 12);
-  g.fillText('−1', x0 + 3, py(0) + 12);
-  g.fillText('+1', px(0) + 5, y0 + 10);
-  g.fillText('−1', px(0) + 5, y0 + side - 3);
+  if (hi > 1) {
+    g.save();
+    g.setLineDash([2, 4]);
+    g.strokeStyle = css('--sat-grid-strong', 'rgba(255,255,255,0.16)');
+    g.beginPath();
+    for (const sgn of [1, -1]) {
+      g.moveTo(x0, Math.round(py(sgn)) + 0.5);
+      g.lineTo(x0 + side, Math.round(py(sgn)) + 0.5);
+    }
+    g.stroke();
+    g.restore();
+    g.fillText('+1', x0 + 3, py(1) - 3);
+    g.fillText('−1', x0 + 3, py(-1) - 3);
+  }
 }
 
 /*
@@ -259,7 +270,9 @@ const shape = computed(() => sat.shape.value);
       <p class="shape__note">{{ shape.note }}</p>
       <p class="shape__why">
         The antiderivative is on the panel because it is what makes the device work: the shaper evaluates
-        <span class="tabular">(F₁(xₙ) − F₁(xₙ₋₁)) ⁄ (xₙ − xₙ₋₁)</span> in place of <span class="tabular">f(xₙ)</span>.
+        <span class="tabular">(F₀(xₙ) − F₀(xₙ₋₁)) ⁄ (xₙ − xₙ₋₁)</span> in place of <span class="tabular">f(xₙ)</span>.
+        Its constant is pinned so <span class="tabular">F₀(0) = 0</span>, which keeps that subtraction of two
+        nearby values from eating precision.
       </p>
       <p class="shape__caption">
         Output against input, with drive, bias, the post clipper and the output trim. The lit span is the

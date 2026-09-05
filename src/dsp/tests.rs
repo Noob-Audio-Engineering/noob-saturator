@@ -534,7 +534,7 @@ fn a_fully_dry_setting_is_bit_exact_bypass() {
                 },
                 dc_block: true,
                 clip_mode: 1,
-                clip_knee: 0.3,
+                clip_knee_db: 10.0,
                 oversample: factor,
             });
             let lat = e.latency();
@@ -570,13 +570,20 @@ fn the_dry_delay_always_matches_the_reported_latency() {
             ..engine::Settings::default()
         });
         settle(&mut e, 4);
-        let f = e.align_frame();
+        let f = e.latency_frame();
         assert_eq!(
             f[0], f[1],
             "factor {factor}: wet delay {} dry {}",
             f[0], f[1]
         );
+        assert_eq!(
+            f[0], f[2],
+            "factor {factor}: reported {} against wet {}",
+            f[2], f[0]
+        );
         assert_eq!(f[0] as usize, e.latency());
+        // The kernel's half-sample is published and excluded, never folded in.
+        assert!((f[4] - 0.5 / e.factor() as f32).abs() < 1e-9);
         assert_eq!(
             e.latency(),
             oversample::latency_for_depth(oversample::depth_for_index(factor))
@@ -602,12 +609,13 @@ fn the_published_transfer_curve_is_the_shape_that_is_running() {
     e.configure(&s);
     let mut curve = [0.0f32; engine::TRANSFER_POINTS];
     e.transfer(&mut curve);
-    let shape = Shape::new(Curve::Round, s.clip_knee as f64);
+    let shape = Shape::new(Curve::Round, engine::knee_width(s.clip_knee_db));
     let g = 10f64.powf(s.drive_db as f64 / 20.0);
     let trim = 10f64.powf(s.output_db as f64 / 20.0);
     let rest = shape.f(s.bias as f64);
     for (i, got) in curve.iter().enumerate() {
-        let x = -1.0 + 2.0 * i as f64 / (engine::TRANSFER_POINTS - 1) as f64;
+        let x = engine::TRANSFER_IN as f64
+            * (-1.0 + 2.0 * i as f64 / (engine::TRANSFER_POINTS - 1) as f64);
         let want = ((shape.f(g * x + s.bias as f64) - rest) * trim) as f32;
         assert!((got - want).abs() < 1e-5, "point {i}: {got} against {want}");
     }
@@ -653,7 +661,7 @@ fn the_ceiling_holds_the_wet_path_at_the_output_setting() {
                 },
                 dc_block: false,
                 clip_mode: mode,
-                clip_knee: 0.4,
+                clip_knee_db: 8.0,
                 ..engine::Settings::default()
             });
             let ceiling = 10f32.powf(output_db / 20.0);
@@ -695,7 +703,7 @@ fn the_engine_stays_finite_through_anything() {
                 mix_law: n % 2,
                 dc_block: true,
                 clip_mode: n % 3,
-                clip_knee: 0.0,
+                clip_knee_db: 0.0,
                 oversample: factor,
                 ..engine::Settings::default()
             });
@@ -760,6 +768,25 @@ fn the_readout_tells_a_clean_tone_from_a_distorted_one() {
         "a naive waveshaper read {:.1} dB against a wire's {:.1} dB",
         d.alias_db,
         c.alias_db
+    );
+    // And the fourth field is the *wanted* distortion, which has to rise
+    // when the shaper is working and sit at the floor when it is a wire.
+    // Without that pairing an alias reading of −120 dB cannot be told from a
+    // shaper that has stopped.
+    // An ordering and a direction, not a bound: the wire's own harmonic
+    // reading is the window's leakage into the mask, which is a property of
+    // the meter and is published as a measured figure in the benchmark
+    // rather than guessed at here.
+    assert!(
+        c.harmonic_db < 0.0,
+        "a wire reported {:.1} dB of harmonic distortion, which is above its own fundamental",
+        c.harmonic_db
+    );
+    assert!(
+        d.harmonic_db > c.harmonic_db + 60.0,
+        "a hard-driven shaper reported {:.1} dB of harmonic distortion against a wire's {:.1}",
+        d.harmonic_db,
+        c.harmonic_db
     );
 }
 
@@ -836,19 +863,79 @@ fn the_parameters_carry_the_ranges_the_dossier_established() {
 fn the_parameter_and_stream_layout_is_what_the_page_expects() {
     let (bridge, ix) = build_bridge("noob-saturator-test", SR);
     assert_eq!(ix.drive, bridge.index_of("drive").unwrap());
-    for (i, id) in ["meter", "alias", "transfer", "color", "align"]
-        .iter()
-        .enumerate()
+    for (i, id) in [
+        "meter", "alias", "transfer", "color", "latency", "spec_in", "spec_out",
+    ]
+    .iter()
+    .enumerate()
     {
         let s = &streams(SR)[i];
         assert_eq!(&s.id, id, "stream {i} moved");
     }
     assert_eq!(STREAM_IX.meter, 0);
-    assert_eq!(STREAM_IX.align, 4);
+    assert_eq!(STREAM_IX.spec_out, 6);
     assert_eq!(streams(SR)[0].capacity, METER_LEN);
     assert_eq!(streams(SR)[1].capacity, ALIAS_LEN);
     assert_eq!(streams(SR)[2].capacity, engine::TRANSFER_POINTS);
     assert_eq!(streams(SR)[3].capacity, engine::COLOR_POINTS);
+    assert_eq!(streams(SR)[4].capacity, LATENCY_LEN);
+    assert_eq!(streams(SR)[5].capacity, SPECTRUM_BINS);
+}
+
+/// **Every published number has to carry its unit**, because the page prints
+/// them and a printed number with a guessed unit is the exact defect this
+/// plug-in exists to complain about. The `alias` frame in particular holds
+/// two levels and a ratio that are easy to mistake for one another.
+#[test]
+fn every_stream_states_the_unit_of_what_it_publishes() {
+    let all = streams(SR);
+    let by_id = |id: &str| all.iter().find(|s| s.id == id).expect(id);
+    let alias = by_id("alias");
+    assert_eq!(
+        alias.meta["layout"].as_str().unwrap(),
+        "alias_db,f0_hz,confidence,harmonic_db"
+    );
+    let units: Vec<&str> = alias.meta["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(units, ["dB", "Hz", "ratio", "dB"]);
+    assert_eq!(
+        alias.meta["band_hz"].as_f64().unwrap() as f32,
+        ALIAS_BAND_HZ
+    );
+    assert_eq!(
+        alias.meta["floor_db"].as_f64().unwrap() as f32,
+        alias::FLOOR_DB
+    );
+    let lat = by_id("latency");
+    assert_eq!(lat.meta["units"].as_array().unwrap().len(), LATENCY_LEN);
+    // The colour shelf has no frequency control, so the panel prints the
+    // constant — and it has to reach the page as a number rather than as
+    // prose somebody retypes onto the face.
+    assert_eq!(
+        by_id("color").meta["shelf_hz"].as_f64().unwrap() as f32,
+        color::SHELF_HZ
+    );
+}
+
+/// The knee is a level below the ceiling, so zero decibels has to be a hard
+/// corner and a larger number a softer one — not the other way round.
+#[test]
+fn the_knee_in_decibels_maps_the_way_the_panel_prints_it() {
+    assert_eq!(engine::knee_width(0.0), 0.0);
+    // Six decibels below the ceiling puts the knee at half of full scale.
+    let k = 1.0 - engine::knee_width(6.0206);
+    assert!((k - 0.5).abs() < 1e-4, "6 dB gave a knee starting at {k}");
+    let mut last = 0.0;
+    for db in [0.0f32, 3.0, 6.0, 12.0, 24.0] {
+        let w = engine::knee_width(db);
+        assert!(w >= last, "the knee narrowed going from {last} to {w}");
+        assert!((0.0..=1.0).contains(&w));
+        last = w;
+    }
 }
 
 /// A settings snapshot read back from the bridge at its defaults has to be
@@ -891,7 +978,8 @@ fn the_processor_publishes_a_consistent_frame() {
         p.publish(&mut audio);
     }
     assert_eq!(p.latency(), p.engine().latency());
-    let f = p.engine().align_frame();
+    let f = p.engine().latency_frame();
     assert_eq!(f[0], f[1]);
-    assert_eq!(f[2] as usize, p.engine().factor());
+    assert_eq!(f[0], f[2]);
+    assert_eq!(f[3], SR);
 }

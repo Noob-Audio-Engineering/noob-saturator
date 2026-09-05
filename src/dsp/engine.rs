@@ -93,7 +93,11 @@ pub const DC_HZ: f32 = 5.0;
 pub const MAX_BLOCK: usize = 8192;
 
 /// Points in the transfer curve the page draws.
-pub const TRANSFER_POINTS: usize = 257;
+pub const TRANSFER_POINTS: usize = 256;
+/// The transfer curve's input span. Wider than full scale, so that the
+/// wavefolder's turn and the clipper's plateau are both inside the picture
+/// rather than at its edge.
+pub const TRANSFER_IN: f32 = 1.5;
 /// Points in the colour curve the page draws.
 pub const COLOR_POINTS: usize = 129;
 /// The colour curve's span.
@@ -104,6 +108,13 @@ pub const COLOR_MAX_HZ: f32 = 20_000.0;
 pub const MIX_LAW_NAMES: [&str; 2] = ["Linear", "Equal Power"];
 /// The ceiling stage's modes.
 pub const CLIP_MODE_NAMES: [&str; 3] = ["Off", "Soft", "Hard"];
+
+/// The knee width the shape wants, from the decibels below the ceiling the
+/// panel prints. Zero decibels is a hard corner; the knee starts at
+/// `10^(−db/20)` of full scale and the shape runs from there to the ceiling.
+pub fn knee_width(db: f32) -> f64 {
+    1.0 - 10f64.powf(-(db.max(0.0) as f64) / 20.0)
+}
 
 /// A one-pole smoother for a continuous control, so a knob does not step.
 #[derive(Clone, Copy, Debug, Default)]
@@ -195,9 +206,15 @@ pub struct Settings {
     pub dc_block: bool,
     /// 0 off, 1 soft, 2 hard.
     pub clip_mode: usize,
-    /// Knee width of the soft clipper, shared by the `Clip` curve and the
-    /// ceiling stage, because they are the same shape.
-    pub clip_knee: f32,
+    /// Where the soft clipper's knee begins, in **decibels below the
+    /// ceiling**. Zero is a hard corner.
+    ///
+    /// It is a level rather than a unit-free fraction for the same reason
+    /// the colour bell publishes a Q: a control whose number nobody can
+    /// reason about is the defect this plug-in exists to complain about. One
+    /// knee shapes both places the shape is used — the `Clip` curve and the
+    /// ceiling stage — because they are the same shape.
+    pub clip_knee_db: f32,
     /// Oversampling factor as a menu index: 2x, 4x, 8x, 16x.
     ///
     /// The default is **sixteen times**, which is higher than the design
@@ -226,7 +243,7 @@ impl Default for Settings {
             color: color::Settings::default(),
             dc_block: true,
             clip_mode: 0,
-            clip_knee: 0.5,
+            clip_knee_db: 6.0,
             oversample: 3,
         }
     }
@@ -253,6 +270,10 @@ pub struct Saturator {
     clip_shape: Shape,
     clip_on: bool,
     meter: [f32; 4],
+    /// Running mean-square over the block, for the meter's root-mean-square
+    /// pair.
+    sums: [f64; 2],
+    frames: usize,
     alias: AliasMeter,
     scratch_in: Vec<f32>,
     scratch_out: Vec<f32>,
@@ -285,6 +306,8 @@ impl Saturator {
             clip_shape: Shape::hard_clip(),
             clip_on: false,
             meter: [0.0; 4],
+            sums: [0.0; 2],
+            frames: 0,
             alias: AliasMeter::new(sr),
             scratch_in: vec![0.0; MAX_BLOCK],
             scratch_out: vec![0.0; MAX_BLOCK],
@@ -332,6 +355,8 @@ impl Saturator {
             self.dry[i].reset();
         }
         self.meter = [0.0; 4];
+        self.sums = [0.0; 2];
+        self.frames = 0;
         self.alias.reset();
     }
 
@@ -382,16 +407,12 @@ impl Saturator {
             }
         }
 
-        self.shape = Shape::new(Curve::from_index(s.curve), s.clip_knee as f64);
+        // The knee arrives in decibels below the ceiling; the shape wants the
+        // fraction of full scale the knee occupies.
+        let knee = knee_width(s.clip_knee_db);
+        self.shape = Shape::new(Curve::from_index(s.curve), knee);
         self.clip_on = s.clip_mode != 0;
-        self.clip_shape = Shape::new(
-            Curve::Clip,
-            if s.clip_mode == 2 {
-                0.0
-            } else {
-                s.clip_knee as f64
-            },
-        );
+        self.clip_shape = Shape::new(Curve::Clip, if s.clip_mode == 2 { 0.0 } else { knee });
         for c in self.color.iter_mut() {
             c.configure(s.color);
         }
@@ -438,7 +459,10 @@ impl Saturator {
         }
 
         let factor = self.resampler[0].factor();
-        let mut peaks = [0.0f32; 4];
+        let mut in_peak = 0.0f32;
+        let mut out_peak = 0.0f32;
+        let mut in_sq = 0.0f64;
+        let mut out_sq = 0.0f64;
         let mut buf = [0.0f32; MAX_FACTOR];
 
         for i in 0..n {
@@ -450,8 +474,8 @@ impl Saturator {
             let dc_on = self.settings.dc_block;
 
             let xs = [l[i], r[i]];
-            peaks[0] = peaks[0].max(xs[0].abs());
-            peaks[1] = peaks[1].max(xs[1].abs());
+            in_peak = in_peak.max(xs[0].abs()).max(xs[1].abs());
+            in_sq += 0.5 * ((xs[0] as f64).powi(2) + (xs[1] as f64).powi(2));
 
             for ch in 0..2 {
                 let x = xs[ch];
@@ -480,11 +504,18 @@ impl Saturator {
                 } else {
                     r[i] = y;
                 }
-                peaks[2 + ch] = peaks[2 + ch].max(y.abs());
+                out_peak = out_peak.max(y.abs());
+                out_sq += 0.5 * (y as f64).powi(2);
             }
         }
 
-        self.meter = peaks;
+        let inv = 1.0 / n as f64;
+        self.meter = [
+            in_peak,
+            out_peak,
+            (in_sq * inv).sqrt() as f32,
+            (out_sq * inv).sqrt() as f32,
+        ];
         if metered {
             self.scratch_out[..n].copy_from_slice(&l[..n]);
             self.alias
@@ -492,9 +523,20 @@ impl Saturator {
         }
     }
 
-    /// `[in_l, in_r, out_l, out_r]`, linear peaks, one frame per block.
+    /// `[in_peak, out_peak, in_rms, out_rms]`, linear amplitude, one frame
+    /// per block. The peaks are the larger of the two channels and the
+    /// root-mean-square pair is over both, because this device is not a
+    /// stereo processor and the panel wants the operating band rather than
+    /// a channel balance.
     pub fn meter(&self) -> [f32; 4] {
         self.meter
+    }
+
+    /// The two magnitude spectra in dB and whether they are new since the
+    /// last call. They come from the transforms the readout already runs, so
+    /// they cost a pass over the magnitudes rather than an extra transform.
+    pub fn take_spectra(&mut self) -> (bool, &[f32], &[f32]) {
+        self.alias.take_spectra()
     }
 
     /// The aliasing readout's most recent frame.
@@ -520,7 +562,7 @@ impl Saturator {
         let trim = 10f64.powf(s.output_db as f64 / 20.0);
         let rest = self.shape.f(b);
         for (i, o) in out.iter_mut().enumerate() {
-            let x = -1.0 + 2.0 * i as f64 / (n - 1).max(1) as f64;
+            let x = TRANSFER_IN as f64 * (-1.0 + 2.0 * i as f64 / (n - 1).max(1) as f64);
             let mut y = self.shape.f(g * x + b) - rest;
             if self.clip_on {
                 y = self.clip_shape.f(y);
@@ -545,16 +587,24 @@ impl Saturator {
         }
     }
 
-    /// `[wet_delay, dry_delay, factor, latency_ms]` — the alignment
-    /// indicator. The first two are always equal; that is the point of
-    /// showing them.
-    pub fn align_frame(&self) -> [f32; 4] {
+    /// `[wet_samples, dry_samples, reported_samples, sample_rate,
+    /// kernel_frac]` — the dry/wet alignment indicator.
+    ///
+    /// The first three are always the same number, and that is the whole
+    /// point of publishing them: the delay the wet path carries, the delay
+    /// the dry path is given, and the figure the host was told. `kernel_frac`
+    /// is the antialiasing kernel's own half-sample at the oversampled rate,
+    /// which is deliberately **not** in the reported figure because it is
+    /// fractional — published so the panel can show it as excluded rather
+    /// than the documentation quietly dropping it.
+    pub fn latency_frame(&self) -> [f32; 5] {
         let lat = self.latency();
         [
             lat as f32,
             self.dry[0].len() as f32,
-            self.factor() as f32,
-            lat as f32 * 1000.0 / self.sr,
+            lat as f32,
+            self.sr,
+            0.5 / self.factor() as f32,
         ]
     }
 }

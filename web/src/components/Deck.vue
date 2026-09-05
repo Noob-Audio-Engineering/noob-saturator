@@ -8,19 +8,19 @@
  * here in `style.css` as the panel's own lit keys. Behaviour generic, look
  * local, which is the rule.
  *
- * **Three controls in the frozen contract are unit-free numbers, and the face
- * gives all three a unit.** Bias is −1 to +1, the colour width is 0.1 to 10
- * and the clip knee is 0 to 1; the parameters stay exactly as the engine
- * froze them, because that is the contract, and the panel prints what the
- * number means. Ableton's colour width is a unit-free zero-to-one whose
- * meaning has never been published anywhere, and objecting to that while
- * shipping three of our own would be indefensible.
+ * **Every control on this deck states its unit, and none of them states it
+ * here.** Bias is a percentage of the clipping point, the colour width is a Q,
+ * the clip knee is decibels below the ceiling — all three arrived unit-free
+ * and the engine has since given all three a unit, so the handle formats the
+ * value and this file renders it. That is the better outcome by a distance:
+ * the improvement over Ableton's unit-free colour width now survives in a
+ * host's generic parameter view, not only on our own face.
  *
- * The other second lines are there for the same reason: the DC blocker states
- * its corner, the knee says which mode it acts in, and the oversampling ratio
- * says that every one of its settings is antialiased, because it is not a
- * quality switch and must not be read as one. There is no quality mode on
- * this device at all.
+ * The second lines that remain say things a unit cannot: the DC filter states
+ * its corner and how many sections it is, the knee says which of the two
+ * things it is currently shaping, and the oversampling ratio says that every
+ * one of its settings is antialiased, because it is not a quality switch and
+ * must not be read as one. There is no quality mode on this device at all.
  */
 import { computed } from 'vue';
 import { Segmented, Toggle } from '@noob-audio-engineering/noob-vst-webgui-framework/vue';
@@ -30,9 +30,18 @@ import { useNoobVstWebguiFramework, useSat } from '../composables/useSaturator.j
 const sat = useSat();
 const { manifest } = useNoobVstWebguiFramework();
 
-/** The DC blocker's corner, published by the engine because the panel prints it. */
+/**
+ * The DC filter's corner and how many sections it is, both published by the
+ * engine because the panel prints them. It is two filters rather than one
+ * because a biased shape rectifies, and one section does not take out as much
+ * offset as maximum bias creates.
+ */
 const dcHz = computed(() => manifest.value?.meta?.dc_corner_hz ?? null);
-const dcHint = computed(() => (dcHz.value ? `${dcHz.value} Hz corner` : 'corner not published'));
+const dcSections = computed(() => manifest.value?.meta?.dc_sections ?? 1);
+const dcHint = computed(() => {
+  if (!dcHz.value) return 'corner not published';
+  return dcSections.value > 1 ? `${dcSections.value} × ${dcHz.value} Hz` : `${dcHz.value} Hz corner`;
+});
 
 /**
  * The knee acts in two places: it opens the post clipper's corner in Soft
@@ -55,12 +64,6 @@ const kneeHint = computed(() => {
 
 const colourOff = computed(() => !!sat.colorOn && !sat.colorOn.on);
 
-/** A signed percentage of the shaper's ceiling, which is what an offset of −1 … +1 is. */
-const pctOfCeiling = (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)} %`;
-/** A filter Q, said out loud. */
-const asQ = (v) => `${v.toFixed(2)} Q`;
-/** How far the corner is opened, zero being a true corner. */
-const asKnee = (v) => `${(v * 100).toFixed(0)} %`;
 </script>
 
 <template>
@@ -69,7 +72,7 @@ const asKnee = (v) => `${(v * 100).toFixed(0)} %`;
       <h3 class="deck__head">Shaper</h3>
       <div class="deck__row">
         <SatKnob v-if="sat.drive" :p="sat.drive" label="Drive" :size="64" />
-        <SatKnob v-if="sat.bias" :p="sat.bias" label="Bias" :size="52" :format="pctOfCeiling" hint="offset, of the ceiling" />
+        <SatKnob v-if="sat.bias" :p="sat.bias" label="Bias" :size="52" hint="offset, of the ceiling" />
         <div v-if="sat.curve" class="deck__stack">
           <span class="deck__cap">Curve</span>
           <Segmented :p="sat.curve" class="keys keys--curve" />
@@ -91,7 +94,7 @@ const asKnee = (v) => `${(v * 100).toFixed(0)} %`;
       <div class="deck__row">
         <SatKnob v-if="sat.colorBase" :p="sat.colorBase" label="Base" :size="48" :disabled="colourOff" hint="drive for the lows" />
         <SatKnob v-if="sat.colorFreq" :p="sat.colorFreq" label="Freq" :size="48" :disabled="colourOff" />
-        <SatKnob v-if="sat.colorQ" :p="sat.colorQ" label="Width" :size="48" :disabled="colourOff" :format="asQ" hint="a Q, not a 0–1" />
+        <SatKnob v-if="sat.colorQ" :p="sat.colorQ" label="Width" :size="48" :disabled="colourOff" />
         <SatKnob v-if="sat.colorDepth" :p="sat.colorDepth" label="Depth" :size="48" :disabled="colourOff" hint="drive for the band" />
       </div>
     </div>
@@ -109,7 +112,7 @@ const asKnee = (v) => `${(v * 100).toFixed(0)} %`;
           <Segmented :p="sat.clipMode" class="keys" />
           <span class="deck__hint">inside the antialiasing</span>
         </div>
-        <SatKnob v-if="sat.clipKnee" :p="sat.clipKnee" label="Knee" :size="46" :disabled="kneeOff" :format="asKnee" :hint="kneeHint" />
+        <SatKnob v-if="sat.clipKnee" :p="sat.clipKnee" label="Knee" :size="46" :disabled="kneeOff" :hint="kneeHint" />
         <div v-if="sat.oversample" class="deck__stack">
           <span class="deck__cap">Oversample</span>
           <Segmented :p="sat.oversample" class="keys" />

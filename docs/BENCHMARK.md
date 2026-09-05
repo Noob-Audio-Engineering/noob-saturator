@@ -40,25 +40,25 @@ The measurement is the worst single non-harmonic bin below 10 kHz relative to th
 | worst in-band alias, Warm curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -115.68 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Round curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -118.70 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Soft curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -124.68 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
-| worst in-band alias, Clip curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -111.09 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
+| worst in-band alias, Clip curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -111.08 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Fold curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -105.19 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Gate curve, 15 kHz tone, 44.1 kHz | at most -80 dB | -107.97 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Warm curve, 15 kHz tone, 48 kHz | at most -80 dB | -116.00 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Round curve, 15 kHz tone, 48 kHz | at most -80 dB | -125.48 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Soft curve, 15 kHz tone, 48 kHz | at most -80 dB | -139.89 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
-| worst in-band alias, Clip curve, 15 kHz tone, 48 kHz | at most -80 dB | -122.45 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
+| worst in-band alias, Clip curve, 15 kHz tone, 48 kHz | at most -80 dB | -121.96 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Fold curve, 15 kHz tone, 48 kHz | at most -80 dB | -107.49 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Gate curve, 15 kHz tone, 48 kHz | at most -80 dB | -104.99 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Warm curve, 44.1 kHz | at most -80 dB | -94.71 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Round curve, 44.1 kHz | at most -80 dB | -99.83 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Soft curve, 44.1 kHz | at most -80 dB | -107.85 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
-| worst in-band alias over the tone sweep, Clip curve, 44.1 kHz | at most -80 dB | -92.82 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
+| worst in-band alias over the tone sweep, Clip curve, 44.1 kHz | at most -80 dB | -92.77 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Fold curve, 44.1 kHz | at most -80 dB | -105.19 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Gate curve, 44.1 kHz | at most -80 dB | -85.34 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Warm curve, 48 kHz | at most -80 dB | -113.49 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Round curve, 48 kHz | at most -80 dB | -123.00 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Soft curve, 48 kHz | at most -80 dB | -134.65 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
-| worst in-band alias over the tone sweep, Clip curve, 48 kHz | at most -80 dB | -112.14 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
+| worst in-band alias over the tone sweep, Clip curve, 48 kHz | at most -80 dB | -112.01 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Fold curve, 48 kHz | at most -80 dB | -100.03 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias over the tone sweep, Gate curve, 48 kHz | at most -80 dB | -102.01 dB | meets | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
 | worst in-band alias, Warm curve, drive at maximum | at most -80 dB | -75.00 dB | **misses** | `ANTIALIASING.md` §9.4 — this project's own target, taken from `research/610.md` §9.12 in the compressor lab, which misses it at −34.6 dB |
@@ -79,7 +79,7 @@ Notes:
 - **worst in-band alias, Warm curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 116.0 dB
 - **worst in-band alias, Round curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 125.4 dB
 - **worst in-band alias, Soft curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 137.1 dB
-- **worst in-band alias, Clip curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 122.3 dB
+- **worst in-band alias, Clip curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 121.9 dB
 - **worst in-band alias, Fold curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 104.6 dB
 - **worst in-band alias, Gate curve, 15 kHz tone, 48 kHz**: full-scale tone, drive +20 dB (an input gain of ten into the shape, the field's standard hot condition), 16x oversampling. Band-limited alias signal-to-noise over the same window: 105.0 dB
 - **worst in-band alias over the tone sweep, Warm curve, 44.1 kHz**: the worst of ten tones from 2 kHz to 19 kHz rather than the single 15 kHz condition the target is stated at. This is the harder statistic and it is here because the single tone flatters the lower oversampling factors by fifteen to thirty decibels — the same narrow-measurement trap that once recorded the compressor lab's 610 at −51 dB when the honest figure was −34.6.
@@ -188,7 +188,7 @@ The antialiasing kernel is a low-pass as well as an antialiaser, and at the base
 | 20 kHz response, fully wet, 16x | -0.03 dB from the kernel alone | -0.08 dB | meets | `ANTIALIASING.md` §4.3, derived from Parker, Zavalishin and Le Bivic's equation (17): the first-order kernel's small-signal response is |cos(ω/2)| |
 | output offset at the maximum bias, the filters engaged | *(none published)* | -0.0002 of full scale (-75.4 dB) | no figure | — |
 | how far the ceiling rings past the Output setting | *(none published)* | +0.46 dB over | no figure | — |
-| the panel readout's own floor | *(none published)* | -135.0 dB with a clean tone through a linear path, confidence 1.000 | no figure | — |
+| the panel readout's own floor | *(none published)* | -135.0 dB of alias and -105.6 dB of harmonic with a clean tone through a linear path, confidence 1.000 | no figure | — |
 
 Notes:
 
@@ -198,7 +198,7 @@ Notes:
 - **20 kHz response, fully wet, 16x**: the assertion is directional, because no figure is published for the whole chain: ours must be at least as much droop as the kernel's own, since the decimator adds to it and cannot subtract from it.
 - **output offset at the maximum bias, the filters engaged**: a biased shape rectifies, and at the maximum bias the same measurement with only the pre-shaper filter engaged — which is all the device this one answers has — reads 39 % of full scale. That is what asymmetry *is* rather than a fault in the shape, and it is why the toggle carries a second filter after the shape as well as before it. Nothing publishes a figure for either.
 - **how far the ceiling rings past the Output setting**: Ableton's wording for their own post-clipper is that the output "will never exceed the          level set by the Output control", which is stronger than any band-limited system can          deliver: filtering a hard corner overshoots it, and no filter of finite length avoids          that. The shape itself never exceeds the setting and a test asserts so; this row is the          part the resampler adds, published rather than folded into a tolerance.
-- **the panel readout's own floor**: the readout is a meter, not this benchmark. It cannot snap the user's input to a transform bin, so its floor is the window's sidelobe level rather than zero. A reading at this floor means "nothing found", not "nothing there", and the page should say so.
+- **the panel readout's own floor**: the readout is a meter, not this benchmark. It cannot snap the user's input to a transform bin, so its floor is the window's sidelobe level rather than zero. Both figures are floors and both are wanted: a reading at either means "nothing found", not "nothing there", and the harmonic one is the level below which the panel cannot tell a working shaper from a wire. The page should say so on the face.
 
 ## What each factor costs
 
@@ -206,10 +206,10 @@ The oversampling factor is the only quality control on this device, it is on the
 
 | quantity | target or published | measured | verdict | source |
 |---|---|---|---|---|
-| cost at 2x | *(none published)* | 1.3 % of one core | no figure | — |
-| cost at 4x | *(none published)* | 2.7 % of one core | no figure | — |
-| cost at 8x | *(none published)* | 4.7 % of one core | no figure | — |
-| cost at 16x | *(none published)* | 10.5 % of one core | no figure | — |
+| cost at 2x | *(none published)* | 1.1 % of one core | no figure | — |
+| cost at 4x | *(none published)* | 2.1 % of one core | no figure | — |
+| cost at 8x | *(none published)* | 4.2 % of one core | no figure | — |
+| cost at 16x | *(none published)* | 8.3 % of one core | no figure | — |
 
 Notes:
 

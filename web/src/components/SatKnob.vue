@@ -22,13 +22,13 @@
  * matters — `sweep` in degrees, `bipolar` (defaults to the
  * handle's own), `ticks` (how many scale marks), `disabled`, `hint` (a
  * second line under the value, for a unit or a note the control has to
- * state), `format` (a function from the plain value to the printed one).
+ * state).
  *
- * `format` exists because three parameters in the frozen contract are
- * unit-free numbers — bias, the colour width and the clip knee — and a
- * control the user cannot reason about is the exact defect this plug-in is
- * built to complain about. The parameter stays as the engine froze it; the
- * face says what the number means.
+ * There is deliberately no `format` hook. There was one, for three parameters
+ * that arrived unit-free — bias, the colour width and the clip knee — and the
+ * engine has since given all three a unit, so the value the handle formats is
+ * already the value the face should print. Rendering a number the engine did
+ * not state is the beginning of the page doing arithmetic, and it does none.
  *
  * Emits: nothing.
  */
@@ -44,12 +44,9 @@ const props = defineProps({
   ticks: { type: Number, default: 11 },
   disabled: { type: Boolean, default: false },
   hint: { type: String, default: null },
-  format: { type: Function, default: null },
 });
 
 const { handlers, dragging } = useKnobGesture(props.p);
-/** What the face prints: the caller's rendering of the plain value, or the handle's own. */
-const text = computed(() => (props.format ? props.format(props.p.plain) : props.p.text));
 const on = computed(() => (props.disabled ? {} : handlers));
 const centred = computed(() => (props.bipolar == null ? props.p.isBipolar : props.bipolar));
 
@@ -96,7 +93,7 @@ const marks = computed(() =>
         :tabindex="disabled ? -1 : 0"
         role="slider"
         :aria-label="label || p.name"
-        :aria-valuetext="text"
+        :aria-valuetext="p.text"
         :aria-disabled="disabled"
         v-on="on"
       >
@@ -115,7 +112,7 @@ const marks = computed(() =>
       </svg>
     </div>
     <div class="knob__label">{{ label || p.name }}</div>
-    <div class="knob__value-text tabular">{{ text }}</div>
+    <div class="knob__value-text tabular">{{ p.text }}</div>
     <div v-if="hint" class="knob__hint">{{ hint }}</div>
   </div>
 </template>

@@ -80,46 +80,57 @@ export function useSat() {
  * The alias measurement, as numbers.
  *
  * The engine publishes four: `alias_db`, the aliasing the device is currently
- * producing; `f0_hz`, the fundamental it detected in the input; `confidence`,
- * zero to one, saying how periodic that input is; and `harmonics`, the
- * harmonic content — the wanted distortion.
+ * producing; `f0_hz`, the fundamental it found; `confidence`, zero to one,
+ * saying how periodic the input is; and `harmonic_db`, the wanted distortion
+ * from the second order up against the fundamental. The stream's meta carries
+ * an explicit `units` array, so nothing here infers a unit from a value.
  *
- * **The measurement is made on the input, not on a test tone**, which is why
- * confidence exists and why it governs the display. With a periodic input,
- * everything that is not at a harmonic of the fundamental is aliasing and the
- * figure means what it says. On a drum loop there is no fundamental to be
- * non-harmonic of, and a number shown there would be a lie. So `usable` gates
- * the readout: below the threshold the panel greys the figure and says why
- * rather than printing something that does not mean anything.
+ * **The measurement is made on the signal actually passing, not on a probe
+ * tone** (`meta.mode` is `"signal"`), which is why confidence exists and why
+ * it governs the display. With a periodic input, everything that is not at a
+ * harmonic of the fundamental is aliasing and the figure means what it says.
+ * On a drum loop there is no fundamental to be non-harmonic of, and a number
+ * shown there would be a lie — so `usable` gates the readout and the panel
+ * says why rather than printing something meaningless.
  *
- * **`harmonics` carries no unit in the frozen contract**, so the reader
- * decides from the value and says which it decided. Harmonic energy relative
- * to a fundamental is always negative, and a count of resolved harmonics is
- * always a small positive integer; the two cannot be confused. `harmonicKind`
- * is what the panel labels it with. This is a gap in the contract, not a
- * guess dressed up — the engine has been asked to state it.
+ * **The harmonic reading has a second condition, and it is arithmetic rather
+ * than a fault.** A fundamental whose harmonics all lie above Nyquist has no
+ * harmonic distortion left in band to report: at 15 kHz that is every one of
+ * them, so the field sits at its floor by construction. `harmonicInBand` is
+ * false there, and the panel explains it instead of letting the number read
+ * like a broken meter.
+ *
+ * Both floors are the engine's measured figures through a linear path, read
+ * from meta. The harmonic floor is the level below which the display cannot
+ * tell a working shaper from a wire, which is why it is on the face.
  */
 export function useAlias() {
   const has = hasStream('alias');
   const frame = has ? useStreamFrame('alias') : { value: null };
+  const meta = has ? getClient().stream('alias').meta || {} : {};
   const at = (i, dflt) => computed(() => (frame.value && Number.isFinite(frame.value[i]) ? frame.value[i] : dflt));
   const confidence = at(2, 0);
-  const harmonics = at(3, null);
+  const f0 = at(1, null);
+  const harmonic = at(3, null);
+  const nyquist = computed(() => (getClient()?.manifest?.meta?.sample_rate || 48000) / 2);
+  const harmonicFloor = Number.isFinite(meta.harmonic_floor_db) ? meta.harmonic_floor_db : HARMONIC_FLOOR_DB;
   return reactive({
     has,
     live: computed(() => frame.value != null),
     aliasDb: at(0, null),
-    f0: at(1, null),
+    f0,
     confidence,
-    harmonics,
-    /** Whether the input is periodic enough for the figure to mean anything. */
+    harmonic,
+    aliasFloor: Number.isFinite(meta.alias_floor_db) ? meta.alias_floor_db : ALIAS_FLOOR_DB,
+    harmonicFloor,
+    /** `"signal"` when the reading is taken from what is passing rather than from a probe tone. */
+    mode: meta.mode || 'signal',
+    /** Whether the input is periodic enough for the alias figure to mean anything. */
     usable: computed(() => confidence.value >= CONFIDENCE_FLOOR),
-    /** `'db'` when the value reads as energy relative to the fundamental, `'count'` when it reads as a number of harmonics. */
-    harmonicKind: computed(() => {
-      const v = harmonics.value;
-      if (v == null || !Number.isFinite(v)) return 'none';
-      return v <= 0 ? 'db' : 'count';
-    }),
+    /** Whether any harmonic of the detected fundamental is still below Nyquist. */
+    harmonicInBand: computed(() => f0.value != null && 2 * f0.value < nyquist.value),
+    /** Whether the harmonic reading has reached the floor, where a shaper and a wire look the same. */
+    harmonicAtFloor: computed(() => harmonic.value != null && harmonic.value <= harmonicFloor + 0.5),
   });
 }
 
@@ -129,43 +140,54 @@ export function useAlias() {
  * engine's own suggested threshold.
  */
 export const CONFIDENCE_FLOOR = 0.5;
+/**
+ * The engine's measured floors through a linear path, used only when a build
+ * publishes no meta for them. Read from the stream wherever it does.
+ */
+export const ALIAS_FLOOR_DB = -135.0;
+export const HARMONIC_FLOOR_DB = -105.6;
 
 /**
  * The dry/wet alignment: what the wet path costs, what the dry path is given,
- * the oversampling factor in force, and the resulting latency in
- * milliseconds.
+ * what was reported to the host, and the antialiasing kernel's fractional
+ * half-sample — which is deliberately not folded into the reported figure, so
+ * the panel shows it as excluded rather than hiding it.
  *
  * **The two delays are equal by construction.** They are not two independent
- * measurements that happen to agree, and the panel must not be built as
- * though they might diverge — it shows the invariant holding, with the sample
- * counts and the latency that follows from them. `equal` exists so that a
- * build where they somehow differ is visible as the engine fault it would be,
- * not so the panel can offer a pass/fail lamp.
+ * measurements that happen to agree, and the panel must not be built as though
+ * they might diverge — it shows the invariant holding, with the sample counts
+ * and the latency that follows. `equal` exists so that a build where they
+ * somehow differ is visible as the engine fault it would be, not so the panel
+ * can offer a pass/fail lamp.
  */
 export function useAlign() {
-  const has = hasStream('align');
-  const frame = has ? useStreamFrame('align') : { value: null };
+  const has = hasStream('latency');
+  const frame = has ? useStreamFrame('latency') : { value: null };
   const at = (i, dflt) => computed(() => (frame.value && Number.isFinite(frame.value[i]) ? frame.value[i] : dflt));
   const wet = at(0, null);
   const dry = at(1, null);
+  const reported = at(2, null);
+  const sampleRate = at(3, 48000);
   return reactive({
     has,
     live: computed(() => frame.value != null),
     wet,
     dry,
-    factor: at(2, null),
-    latencyMs: at(3, null),
+    reported,
+    sampleRate,
+    kernelFrac: at(4, 0),
+    latencyMs: computed(() => (reported.value == null ? null : (reported.value / (sampleRate.value || 48000)) * 1000)),
     equal: computed(() => wet.value != null && dry.value != null && Math.abs(wet.value - dry.value) < 1e-6),
   });
 }
 
 /**
- * The colour section's forward magnitude curve: 129 points in dB, log-spaced
- * over the range the stream's meta declares. The inverse the display draws
- * beside it is this negated, which is what the topology says it is.
+ * The colour section's forward magnitude curve: points in dB, log-spaced over
+ * the range the stream's meta declares. The inverse the display draws beside
+ * it is this negated, which is what the topology says it is.
  *
- * `has` is false on a build that does not publish it yet, and the display
- * falls back to computing the pair from the parameters.
+ * `has` is false on a build that does not publish it, and the display falls
+ * back to computing the pair from the parameters and says so on screen.
  */
 export function useColorCurve() {
   const has = hasStream('color');

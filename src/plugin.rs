@@ -203,8 +203,11 @@ impl Default for NoobSaturatorParams {
             )
             .with_unit(" Hz")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            // Named for the control it answers and united for what it is, so
+            // the improvement survives outside our own editor: a host's
+            // generic parameter view reads "0.70 Q" where theirs reads "0.3".
             color_q: FloatParam::new(
-                "Colour Q",
+                "Colour Width",
                 d.color.q,
                 FloatRange::Skewed {
                     min: dsp::COLOR_Q_MIN,
@@ -212,6 +215,7 @@ impl Default for NoobSaturatorParams {
                     factor: FloatRange::skew_factor(-1.0),
                 },
             )
+            .with_unit(" Q")
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
             color_depth: db(
                 "Colour Depth",
@@ -221,12 +225,18 @@ impl Default for NoobSaturatorParams {
             ),
             dc_block: BoolParam::new("Pre DC Filter", d.dc_block),
             clip_mode: EnumParam::new("Post Clip", ClipModeParam::Off),
+            // Decibels below the ceiling, not a fraction: zero is a hard
+            // corner and the number says where the knee starts.
             clip_knee: FloatParam::new(
                 "Clip Knee",
-                d.clip_knee,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
+                d.clip_knee_db,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: dsp::CLIP_KNEE_MAX_DB,
+                },
             )
-            .with_step_size(0.01),
+            .with_unit(" dB")
+            .with_step_size(0.1),
             oversample: EnumParam::new("Oversample", OversampleParam::X16),
             ui_store: StoreSlot::new(),
         }
@@ -274,7 +284,7 @@ impl NoobSaturatorParams {
     fn settings(&self) -> Settings {
         Settings {
             drive_db: self.drive.value(),
-            bias: self.bias.value(),
+            bias: self.bias.value() / 100.0,
             curve: self.curve.value() as usize,
             output_db: self.output.value(),
             mix: (self.mix.value() / 100.0).clamp(0.0, 1.0),
@@ -288,7 +298,7 @@ impl NoobSaturatorParams {
             },
             dc_block: self.dc_block.value(),
             clip_mode: self.clip_mode.value() as usize,
-            clip_knee: self.clip_knee.value(),
+            clip_knee_db: self.clip_knee.value(),
             oversample: self.oversample.value() as usize,
         }
     }
@@ -312,7 +322,7 @@ impl Default for NoobSaturator {
             params.as_ref(),
             dsp::streams(48_000.0),
             EditorConfig::new(1000, 620)
-                .size_limits((820, 520), (7680, 4320))
+                .size_limits((900, 520), (7680, 4320))
                 .assets(Assets::Lookup(ui_lookup)),
             |b| {
                 b.meta(serde_json::json!({
@@ -322,6 +332,10 @@ impl Default for NoobSaturator {
                     "standalone": false,
                     "transfer_points": dsp::TRANSFER_POINTS,
                     "color_points": dsp::COLOR_POINTS,
+                    "dc_corner_hz": dsp::engine::DC_HZ,
+                    "color_shelf_hz": color::SHELF_HZ,
+                    "alias_band_hz": dsp::ALIAS_BAND_HZ,
+                    "oversample_taps": dsp::oversample::TAPS,
                 }))
             },
         );

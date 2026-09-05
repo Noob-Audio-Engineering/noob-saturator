@@ -276,7 +276,7 @@ fn bare(curve: Curve, drive_db: f32, oversample: usize) -> engine::Settings {
         },
         dc_block: false,
         clip_mode: 0,
-        clip_knee: 0.5,
+        clip_knee_db: 6.0,
         oversample,
     }
 }
@@ -1033,12 +1033,15 @@ fn bench_response(default_ix: usize) -> Section {
     rows.push(Row::unanchored(
         "the panel readout's own floor",
         format!(
-            "{:.1} dB with a clean tone through a linear path, confidence {:.3}",
-            f[0], f[2]
+            "{:.1} dB of alias and {:.1} dB of harmonic with a clean tone through a linear \
+             path, confidence {:.3}",
+            f[0], f[3], f[2]
         ),
         "the readout is a meter, not this benchmark. It cannot snap the user's input to a \
-         transform bin, so its floor is the window's sidelobe level rather than zero. A reading at \
-         this floor means \"nothing found\", not \"nothing there\", and the page should say so.",
+         transform bin, so its floor is the window's sidelobe level rather than zero. Both \
+         figures are floors and both are wanted: a reading at either means \"nothing found\", \
+         not \"nothing there\", and the harmonic one is the level below which the panel \
+         cannot tell a working shaper from a wire. The page should say so on the face.",
     ));
 
     Section {

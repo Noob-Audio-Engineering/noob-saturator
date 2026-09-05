@@ -392,6 +392,15 @@ body {
 .alias__v--thd {
   color: var(--sat-brass);
 }
+/*
+ * The harmonic cell holds an explanation rather than a measurement when the
+ * fundamental's harmonics have all gone above Nyquist, or when the reading has
+ * reached the floor. Dimmed, because it is a reason and not a figure.
+ */
+.alias__v--muted {
+  color: var(--sat-text-dim);
+  font-size: 11px;
+}
 /* the periodicity bar, with a tick where the readout starts meaning something */
 .alias__row--bar {
   gap: 8px;
@@ -425,6 +434,15 @@ body {
   font-size: 9px;
   line-height: 1.35;
   color: var(--sat-text-faint);
+}
+/*
+ * The same line carries the arithmetic when one of the two conditions has
+ * taken the harmonic reading away. That is the moment a reader most needs it,
+ * so it is brighter than the standing claims wording and it survives the
+ * short-window cull below.
+ */
+.alias__foot.is-note {
+  color: var(--sat-text-dim);
 }
 .alias__history {
   display: flex;
@@ -1225,6 +1243,9 @@ body {
   }
   .alias__foot {
     display: none;
+  }
+  .alias__foot.is-note {
+    display: block;
   }
   .alias__histcap {
     /* the caption goes, the key stays: an unlabelled two-colour chart is a puzzle */

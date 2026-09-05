@@ -61,7 +61,7 @@ const SILENCE: f32 = 1e-5;
 pub const FLOOR_DB: f32 = -140.0;
 
 /// One frame of the readout, in the order the stream publishes it.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Reading {
     /// Non-harmonic energy against the fundamental, in dB.
     pub alias_db: f32,
@@ -70,14 +70,44 @@ pub struct Reading {
     /// How periodic the input is, 0 to 1. Below about a half the number
     /// beside it means nothing.
     pub confidence: f32,
-    /// How many harmonics of the fundamental fell below Nyquist and were
-    /// masked.
-    pub harmonics: f32,
+    /// The **wanted** distortion: harmonic energy from the second order
+    /// upwards, against the fundamental, in dB. A level, not a count.
+    ///
+    /// It is here because without it the headline number cannot be read. A
+    /// reading of −120 dB of aliasing is indistinguishable from a shaper that
+    /// has stopped working, and the two are told apart by watching this
+    /// climb while that one does not.
+    ///
+    /// One condition on it, which the panel should carry: it is measured at
+    /// whatever fundamental the input actually has, and a tone high enough
+    /// that no harmonic of it falls below Nyquist has nothing to report. At
+    /// 15 kHz, the frequency the aliasing target is stated at, that is every
+    /// harmonic — so this field sits at its floor there by construction
+    /// rather than by fault.
+    pub harmonic_db: f32,
+}
+
+impl Default for Reading {
+    /// Silence, not zero: a level field defaults to the floor.
+    fn default() -> Self {
+        Reading::quiet()
+    }
 }
 
 impl Reading {
+    /// Nothing playing: both levels at the floor rather than at zero, since
+    /// zero decibels would read as "everything is aliasing".
+    pub fn quiet() -> Self {
+        Reading {
+            alias_db: FLOOR_DB,
+            f0_hz: 0.0,
+            confidence: 0.0,
+            harmonic_db: FLOOR_DB,
+        }
+    }
+
     pub fn to_frame(self) -> [f32; 4] {
-        [self.alias_db, self.f0_hz, self.confidence, self.harmonics]
+        [self.alias_db, self.f0_hz, self.confidence, self.harmonic_db]
     }
 }
 
@@ -95,6 +125,11 @@ pub struct AliasMeter {
     /// measurement, because this runs in the audio thread and nothing in the
     /// audio thread allocates.
     masked: Vec<bool>,
+    /// The two magnitude spectra in dB, for the colour view's backdrop.
+    mag_in: Vec<f32>,
+    mag_out: Vec<f32>,
+    /// Whether a measurement has landed since the spectra were last read.
+    fresh: bool,
     fill: usize,
     sr: f32,
     reading: Reading,
@@ -123,12 +158,12 @@ impl AliasMeter {
             spec_in: vec![Complex::new(0.0, 0.0); WINDOW],
             spec_out: vec![Complex::new(0.0, 0.0); WINDOW],
             masked: vec![false; WINDOW / 2],
+            mag_in: vec![FLOOR_DB; WINDOW / 2],
+            mag_out: vec![FLOOR_DB; WINDOW / 2],
+            fresh: false,
             fill: 0,
             sr,
-            reading: Reading {
-                alias_db: FLOOR_DB,
-                ..Default::default()
-            },
+            reading: Reading::quiet(),
         }
     }
 
@@ -139,10 +174,20 @@ impl AliasMeter {
 
     pub fn reset(&mut self) {
         self.fill = 0;
-        self.reading = Reading {
-            alias_db: FLOOR_DB,
-            ..Default::default()
-        };
+        self.fresh = false;
+        self.reading = Reading::quiet();
+        self.mag_in.fill(FLOOR_DB);
+        self.mag_out.fill(FLOOR_DB);
+    }
+
+    /// The two magnitude spectra, and whether they have been refreshed since
+    /// this was last called. The flag is cleared by reading it, so a caller
+    /// that publishes on `true` publishes once per window rather than once
+    /// per block.
+    pub fn take_spectra(&mut self) -> (bool, &[f32], &[f32]) {
+        let fresh = self.fresh;
+        self.fresh = false;
+        (fresh, &self.mag_in, &self.mag_out)
     }
 
     /// The most recent measurement. Held between windows, so the page sees a
@@ -198,10 +243,8 @@ impl AliasMeter {
         }
         let input_peak = self.inp.iter().fold(0.0f32, |a, v| a.max(v.abs()));
         if peak == 0 || input_peak < SILENCE {
-            self.reading = Reading {
-                alias_db: FLOOR_DB,
-                ..Default::default()
-            };
+            self.reading = Reading::quiet();
+            self.fill_spectra();
             return;
         }
         let refined = {
@@ -240,7 +283,7 @@ impl AliasMeter {
         for m in self.masked.iter_mut().take(MASK_BINS + 1) {
             *m = true;
         }
-        let mut harmonics = 0usize;
+        let mut harmonic = 0.0f64;
         let mut k = 1usize;
         loop {
             let centre = refined * k as f32;
@@ -253,7 +296,14 @@ impl AliasMeter {
             for m in self.masked.iter_mut().take(hi + 1).skip(lo) {
                 *m = true;
             }
-            harmonics += 1;
+            // The second harmonic upwards is the *wanted* distortion, which
+            // is a different quantity from the aliasing and is measured here
+            // so the panel can show the two against each other.
+            if k >= 2 {
+                for j in lo..=hi {
+                    harmonic += self.spec_out[j].norm_sqr() as f64;
+                }
+            }
             k += 1;
         }
 
@@ -268,21 +318,36 @@ impl AliasMeter {
             }
         }
 
-        let ratio = if fundamental > 0.0 {
-            (alias / fundamental).sqrt()
-        } else {
-            0.0
-        };
-        let alias_db = if ratio > 0.0 {
-            (20.0 * ratio.log10()) as f32
-        } else {
-            FLOOR_DB
+        let against_fundamental = |energy: f64| -> f32 {
+            if fundamental <= 0.0 || energy <= 0.0 {
+                return FLOOR_DB;
+            }
+            ((20.0 * (energy / fundamental).sqrt().log10()) as f32).max(FLOOR_DB)
         };
         self.reading = Reading {
-            alias_db: alias_db.max(FLOOR_DB),
+            alias_db: against_fundamental(alias),
             f0_hz: f0,
             confidence: confidence.clamp(0.0, 1.0),
-            harmonics: harmonics as f32,
+            harmonic_db: against_fundamental(harmonic),
         };
+        self.fill_spectra();
+    }
+
+    /// Magnitudes of the two transforms in dBFS, scaled so that a full-scale
+    /// sine reads 0 dB whatever the window does to it.
+    ///
+    /// These cost nothing. The transforms are already computed — the readout
+    /// above needs both of them — so publishing the spectra is a pass over
+    /// the magnitudes and not an FFT in the audio path for a picture.
+    fn fill_spectra(&mut self) {
+        // Coherent gain of the four-term Blackman-Harris window is its first
+        // coefficient, and the factor of two puts a two-sided line back
+        // together.
+        let scale = 2.0 / (0.35875 * WINDOW as f32);
+        for k in 0..WINDOW / 2 {
+            self.mag_in[k] = 20.0 * (self.spec_in[k].norm() * scale).max(1e-9).log10();
+            self.mag_out[k] = 20.0 * (self.spec_out[k].norm() * scale).max(1e-9).log10();
+        }
+        self.fresh = true;
     }
 }

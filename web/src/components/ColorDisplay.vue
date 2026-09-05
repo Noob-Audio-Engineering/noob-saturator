@@ -26,12 +26,11 @@
  * tested there against a signal. Nothing on this page measures it, and this
  * display says so rather than implying it has checked.
  *
- * **What is missing, and it is missing from the contract rather than from
- * here.** Ableton draw input and output spectra behind their colour curve and
- * that is the better half of their idea; the frozen stream set has no
- * spectra, so the traces are absent and the caption says why. The drawing
- * code is still behind `hasStream`, so the moment `spec_in` and `spec_out`
- * exist they appear with no further work.
+ * **The spectra behind the curve are Ableton's better half and they are here
+ * now.** The input is drawn as a bare line over the filled output, because the
+ * output is the input plus what the shaper made and is never below it — a
+ * filled output painted last covers the trace the display exists to compare
+ * against. A build that publishes only one of the two says so instead.
  *
  * The width control states its Q, which is the improvement over Ableton's
  * unit-free 0…1: a filter width nobody can reason about is a defect.
@@ -39,7 +38,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { bandCoefs, bandDb } from '@noob-audio-engineering/noob-vst-webgui-framework/components';
 import { useStreamFrame } from '@noob-audio-engineering/noob-vst-webgui-framework/vue';
-import { hasStream, useColorCurve, useNoobVstWebguiFramework, useSat } from '../composables/useSaturator.js';
+import { getClient, hasStream, useColorCurve, useNoobVstWebguiFramework, useSat } from '../composables/useSaturator.js';
 
 const sat = useSat();
 const { manifest } = useNoobVstWebguiFramework();
@@ -48,6 +47,9 @@ const hasIn = hasStream('spec_in');
 const hasOut = hasStream('spec_out');
 const specIn = hasIn ? useStreamFrame('spec_in') : ref(null);
 const specOut = hasOut ? useStreamFrame('spec_out') : ref(null);
+/** The FFT size each spectrum was taken at, stated by the engine rather than guessed from the bin count. */
+const fftIn = hasIn ? getClient().stream('spec_in').meta?.fft_size || 0 : 0;
+const fftOut = hasOut ? getClient().stream('spec_out').meta?.fft_size || 0 : 0;
 
 const MIN_HZ = 20;
 const MAX_HZ = 20000;
@@ -63,7 +65,7 @@ const sampleRate = computed(() => manifest.value?.meta?.sample_rate || 48000);
  * publishes it and the display prints it rather than leaving the reader to
  * guess what Base acts on.
  */
-const shelfHz = computed(() => manifest.value?.meta?.color_shelf_hz || 120);
+const shelfHz = computed(() => manifest.value?.meta?.color_shelf_hz || 150);
 
 const on = computed(() => !sat.colorOn || sat.colorOn.on);
 const base = computed(() => (sat.colorBase ? sat.colorBase.plain : 0));
@@ -196,10 +198,12 @@ function draw() {
    * shaper made, so it is never below it, and a filled output painted last
    * covers the trace the display exists to compare against.
    */
-  const drawSpec = (data, fill, stroke) => {
+  const drawSpec = (data, fft, fill, stroke) => {
     if (!data || data.length < 4) return;
     const bins = data.length;
-    const binHz = sampleRate.value / ((bins - 1) * 2);
+    // The engine states its FFT size; deriving one from the bin count is only
+    // right when the Nyquist bin is included, and this build's is not.
+    const binHz = sampleRate.value / (fft || (bins - 1) * 2);
     g.beginPath();
     let started = false;
     for (let x = 0; x <= pw; x++) {
@@ -230,8 +234,8 @@ function draw() {
       g.stroke();
     }
   };
-  drawSpec(smooth('out', specOut.value), css('--sat-spec-out-fill', 'rgba(94,226,160,0.10)'), css('--sat-spec-out', 'rgba(94,226,160,0.6)'));
-  drawSpec(smooth('in', specIn.value), null, css('--sat-spec-in', 'rgba(150,170,190,0.55)'));
+  drawSpec(smooth('out', specOut.value), fftOut, css('--sat-spec-out-fill', 'rgba(94,226,160,0.10)'), css('--sat-spec-out', 'rgba(94,226,160,0.6)'));
+  drawSpec(smooth('in', specIn.value), fftIn, null, css('--sat-spec-in', 'rgba(150,170,190,0.55)'));
 
   // the emphasis pair: forward solid, inverse dashed
   const f = forwardDb.value;
@@ -309,15 +313,16 @@ onBeforeUnmount(() => cancelAnimationFrame(raf));
       <p class="colour__caption">
         The dashed trace is the algebraic negation of the solid one. That the engine's pair actually nulls is
         tested in the Rust half against a signal; this display has not measured it and does not claim to.
-        Curve axis ±{{ CURVE_DB }} dB on the right.
+        Curve axis ±{{ CURVE_DB }} dB on the right; where there are spectra they run −108 … 0 dBFS on the left,
+        a full-scale sine reading 0.
       </p>
       <p v-if="!colorCurve.has" class="colour__warn">
         This build publishes no colour-curve stream, so the pair is the page's own filter arithmetic rather
         than the engine's.
       </p>
       <p v-if="!hasIn || !hasOut" class="colour__gap">
-        Ableton draw input and output spectra behind this curve, which is the better half of their idea. The
-        engine's stream set has none, so there is nothing to draw behind it here.
+        Ableton draw input and output spectra behind this curve, which is the better half of their idea. This
+        build does not publish both, so there is nothing to draw behind it here.
       </p>
     </div>
   </div>

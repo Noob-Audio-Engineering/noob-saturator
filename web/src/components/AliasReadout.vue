@@ -16,13 +16,21 @@
  * Nobody has measured Ableton's Saturator, so no figure on this panel is a
  * margin over theirs and no wording implies one.
  *
- * **The confidence field governs the readout, and this is the important part
- * of the design.** The measurement is made on whatever is going in, not on a
- * test tone, so on a drum loop there is no fundamental to be non-harmonic of
- * and any number shown would be a lie. Below the threshold the figure is
- * greyed, the unit goes with it, and the strip says what it needs instead. A
- * headline feature that lies on real material is worse than no headline
- * feature.
+ * **Three conditions are printed rather than left for a user to discover**,
+ * because each of them makes a number stop meaning what it looks like:
+ *
+ * 1. *Periodicity.* The reading is taken from the signal actually passing,
+ *    not from a probe tone, so on a drum loop there is no fundamental to be
+ *    non-harmonic of. Below the threshold the figure greys, the bar turns,
+ *    and the strip says so. A headline feature that lies on real material is
+ *    worse than no headline feature.
+ * 2. *Nyquist.* A fundamental whose harmonics all lie above Nyquist has no
+ *    harmonic distortion left in band — at 15 kHz that is every one of them —
+ *    so the harmonic field sits at its floor by construction. That is
+ *    arithmetic, not a fault, and the panel says which.
+ * 3. *The floor.* Below the engine's measured harmonic floor the display
+ *    cannot tell a working shaper from a wire, so the floor is on the face
+ *    rather than in a comment.
  *
  * In offline design mode every figure here is invented by `dev/manifest.js`,
  * so the strip stamps itself DESIGN MODE and marks the numbers. A screenshot
@@ -39,33 +47,45 @@ const offline = computed(() => !!getClient()?.offline);
 const confidencePct = computed(() => `${Math.round(Math.min(1, Math.max(0, alias.confidence)) * 100)}%`);
 const floorPct = `${CONFIDENCE_FLOOR * 100}%`;
 
-/** The harmonic reading, labelled by what the value turned out to be. */
+/** The harmonic reading, or the short reason there is not one. */
 const harmonicText = computed(() => {
-  if (alias.harmonicKind === 'db') return `${dbText(alias.harmonics)} dBc`;
-  if (alias.harmonicKind === 'count') return `${Math.round(alias.harmonics)} orders`;
-  return '—';
+  if (!alias.has || alias.harmonic == null) return '—';
+  if (!alias.harmonicInBand) return 'above Nyquist';
+  if (alias.harmonicAtFloor) return `at floor ${dbText(alias.harmonicFloor)} dB`;
+  return `${dbText(alias.harmonic)} dBc`;
 });
+/** Whether that cell is a measurement or an explanation, so it can be dimmed. */
+const harmonicMuted = computed(() => alias.has && (!alias.harmonicInBand || alias.harmonicAtFloor));
+
+/**
+ * The line under the figures. It carries the claims wording normally and the
+ * arithmetic when one of the two conditions has taken the harmonic reading
+ * away — which is the moment a user most needs to be told why, so it replaces
+ * the standing line rather than being added below it.
+ */
+const foot = computed(() => {
+  if (alias.has && !alias.harmonicInBand) {
+    return `Every harmonic of ${hzText(alias.f0)} lies above Nyquist, so there is none left in band to measure. The aliasing figure is unaffected.`;
+  }
+  if (alias.has && alias.harmonicAtFloor) {
+    return `The harmonic floor is ${dbText(alias.harmonicFloor)} dB; below it this display cannot tell a working shaper from a wire.`;
+  }
+  return "Both figures are of this device. Nobody has measured Ableton's Saturator, so nothing here is a margin over it.";
+});
+const footNote = computed(() => alias.has && (!alias.harmonicInBand || alias.harmonicAtFloor));
 
 /*
- * The history: the aliasing against the harmonic content, both of this
- * device, over the last ten seconds. Sweep the drive and the brass trace
- * climbs while the green one does not. That contrast is the whole argument
- * and it needs no counterfactual, because both traces are measurements.
+ * The history: the aliasing against the harmonic content, both of this device,
+ * over the last ten seconds. Sweep the drive and the brass trace climbs while
+ * the green one does not.
  *
  * **The chart is built once, on the page's first render, and never rebuilt.**
- * The framework's `Timeline` takes its series in `onMounted`, and it turns
- * out that is the only moment it takes them: a chart mounted later by a
- * `v-if`, or replaced by a changed `:key`, draws its grid and no traces at
- * all. Both were tried while wiring this up and both silently drew nothing,
- * which is the worst way for a display to fail. So the series are fixed here
- * rather than derived from the first frame.
- *
- * That fixes the harmonic trace's axis at −120…0 dB before any frame has said
- * what `harmonics` is, which is a gap in the frozen contract rather than a
- * guess made here: the field carries no unit, the reading below labels it by
- * what the value turns out to be, and the engine has been asked to state it.
- * If it comes back as a count of orders rather than an energy, this one
- * series comes out.
+ * The framework's `Timeline` takes its series in `onMounted` and only there: a
+ * chart mounted later by a `v-if`, or replaced by a changed `:key`, draws its
+ * grid and no traces at all, with nothing in the console. Both were tried
+ * while wiring this up. The series are therefore fixed here, which the
+ * contract now allows — `harmonic_db` carries an explicit unit, so there is
+ * nothing left to wait for a frame to tell us.
  */
 const series = [
   { stream: 'alias', index: 3, unit: 'raw', range: [-120, 0], color: '#d9a441', width: 1.4, label: 'harmonics' },
@@ -88,7 +108,7 @@ const series = [
       <div class="alias__cond">
         <template v-if="!alias.has">no alias measurement in this build</template>
         <template v-else-if="alias.usable">
-          measured on the input · everything off a harmonic of {{ hzText(alias.f0) }}
+          measured on the signal passing · everything off a harmonic of {{ hzText(alias.f0) }}
         </template>
         <template v-else>
           the input is not periodic enough to measure · this needs a tone
@@ -99,7 +119,7 @@ const series = [
     <div class="alias__compare">
       <div class="alias__row">
         <span class="alias__k">harmonic content, wanted</span>
-        <span class="alias__v alias__v--thd tabular">{{ harmonicText }}</span>
+        <span class="alias__v tabular" :class="harmonicMuted ? 'alias__v--muted' : 'alias__v--thd'">{{ harmonicText }}</span>
       </div>
       <div class="alias__row">
         <span class="alias__k">input fundamental</span>
@@ -113,10 +133,7 @@ const series = [
         </span>
         <span class="alias__v tabular">{{ alias.has ? alias.confidence.toFixed(2) : '—' }}</span>
       </div>
-      <p class="alias__foot">
-        Both figures are of this device. Nobody has measured Ableton's Saturator, so nothing here is a
-        margin over it.
-      </p>
+      <p class="alias__foot" :class="{ 'is-note': footNote }">{{ foot }}</p>
     </div>
 
     <div class="alias__history">
@@ -136,7 +153,7 @@ const series = [
           v-if="alias.has"
           :series="series"
           :seconds="10"
-          :grid-series="0"
+          :grid-series="1"
           :grid-step="24"
           :time-ticks="false"
           :legend="false"
