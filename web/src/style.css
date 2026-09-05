@@ -1,0 +1,1421 @@
+/*
+ * Noob Saturator's look, in one file.
+ *
+ * **The device is a measuring instrument, so the panel is one.** Saturator
+ * models no circuit — there is no hardware to draw, no schematic and no
+ * front panel to borrow — and what this plug-in actually claims is a set of
+ * measurements. So the face is a bench distortion analyser: a dark
+ * instrument case, a graphite plate, glass over the displays, phosphor green
+ * for what this device does, a warmer orange for the naive path it is being
+ * compared against, and brass for the things you turn.
+ *
+ * The three accents mean one thing each and never swap:
+ *   green  — this device, its traces and its readings
+ *   orange — the same curve with the antialiasing off, and warnings
+ *   brass  — controls, and the colour section's own curve
+ *
+ * **None of this is Ableton's.** Their device is a pale flat rectangle with a
+ * small dark curve box and a yellow highlight; two of their display ideas
+ * are adopted and credited in `web/README.md`, and none of their colours,
+ * proportions or arrangement are. The framework holds generics only, so
+ * every value below lives here and nothing visual is imposed on the next
+ * plug-in built on it.
+ */
+@import 'tailwindcss';
+/*
+ * Tailwind scans this app's sources by default; the framework's Vue
+ * components live in the installed package, so their directory is added
+ * as a content source.
+ */
+@source '../node_modules/@noob-audio-engineering/noob-vst-webgui-framework/crates/noob-vst-webgui-framework/web/vue';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+:root {
+  /* the case and the plate */
+  --sat-case: #0d0f0e;
+  --sat-case-hi: #141817;
+  --sat-panel: #202422;
+  --sat-panel-hi: #272c29;
+  --sat-edge: rgba(226, 232, 222, 0.08);
+  --sat-edge-hi: rgba(226, 232, 222, 0.14);
+  /* glass over every display */
+  --sat-glass: #070a09;
+  --sat-glass-hi: #0b100e;
+
+  --sat-text: #dfe6dd;
+  --sat-text-dim: rgba(223, 230, 221, 0.45);
+  --sat-text-faint: rgba(223, 230, 221, 0.28);
+
+  /* this device */
+  --sat-trace: #5ee2a0;
+  --sat-trace-dim: rgba(94, 226, 160, 0.38);
+  --sat-trace-fill: rgba(94, 226, 160, 0.1);
+  --sat-signal: #e6f2ea;
+  /* the same curve with the antialiasing off, and anything that wants attention */
+  --sat-naive: #e07a4a;
+  /* what you turn, and the colour section's curve */
+  --sat-brass: #d9a441;
+  --sat-brass-dim: rgba(217, 164, 65, 0.4);
+  --sat-inverse: rgba(217, 164, 65, 0.42);
+
+  --sat-grid: rgba(226, 232, 222, 0.07);
+  --sat-grid-strong: rgba(226, 232, 222, 0.17);
+  --sat-spec-in: rgba(150, 170, 190, 0.5);
+  --sat-spec-in-fill: rgba(150, 170, 190, 0.09);
+  --sat-spec-out: rgba(94, 226, 160, 0.62);
+  --sat-spec-out-fill: rgba(94, 226, 160, 0.09);
+
+  /* what the framework's own components read */
+  --noob-vst-webgui-framework-accent: var(--sat-brass);
+  --noob-vst-webgui-framework-text: var(--sat-text);
+  --noob-vst-webgui-framework-text-dim: var(--sat-text-dim);
+  --noob-vst-webgui-framework-bg: var(--sat-glass);
+  --noob-vst-webgui-framework-panel: rgba(32, 36, 34, 0.97);
+  --noob-vst-webgui-framework-border: var(--sat-edge-hi);
+  --noob-vst-webgui-framework-grid: var(--sat-grid);
+  --noob-vst-webgui-framework-grid-strong: var(--sat-grid-strong);
+  --noob-vst-webgui-framework-track: rgba(226, 232, 222, 0.12);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background: var(--sat-case);
+  color: var(--sat-text);
+  overflow: hidden;
+  user-select: none;
+  /* knob drags must never scroll or pinch-zoom the page */
+  touch-action: none;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ frame */
+.sat {
+  height: 100%;
+  min-width: 900px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(94, 226, 160, 0.04), transparent 60%),
+    linear-gradient(180deg, var(--sat-case-hi), var(--sat-case));
+}
+.sat__wait {
+  margin: auto;
+  color: var(--sat-text-dim);
+  font-size: 13px;
+}
+.sat__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 9px 11px 11px;
+  overflow-y: auto;
+}
+.sat__grip.noob-vst-webgui-framework-resize-grip {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 30;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 55%,
+    var(--sat-brass-dim) 55% 60%,
+    transparent 60% 70%,
+    var(--sat-brass-dim) 70% 75%,
+    transparent 75% 85%,
+    var(--sat-brass-dim) 85% 90%,
+    transparent 90%
+  );
+}
+.sat__grip.is-dragging,
+.sat__grip:hover {
+  background-color: rgba(217, 164, 65, 0.14);
+}
+
+/*
+ * The plate every group of controls and every display sits on: a dark
+ * graphite panel with a lit top edge, so the page reads as boxes screwed to
+ * a case rather than as regions of one flat surface.
+ */
+.plate,
+.measure,
+.pane,
+.deck__group,
+.bench {
+  border: 1px solid var(--sat-edge);
+  border-radius: 7px;
+  background: linear-gradient(180deg, var(--sat-panel-hi), var(--sat-panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------------------------------------------------------------- top bar */
+.bar {
+  flex: 0 0 auto;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #191d1b, #121514);
+  border-bottom: 1px solid var(--sat-edge);
+  white-space: nowrap;
+}
+.bar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+.bar__dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a4f4c;
+}
+.bar__dot.on {
+  background: var(--sat-trace);
+  box-shadow: 0 0 7px rgba(94, 226, 160, 0.8);
+}
+.bar__name {
+  font: 800 12px var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.bar__sub {
+  font-size: 11px;
+  color: var(--sat-text-dim);
+}
+.bar__tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bar__state {
+  font: 700 9px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sat-text-faint);
+}
+.bar__stat {
+  font: 400 10px var(--font-mono);
+  color: var(--sat-text-dim);
+}
+
+/* the panel's own key: a small lit push button, used for every page-level tool */
+.key {
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid var(--sat-edge-hi);
+  background: linear-gradient(180deg, #2d322f, #1e2321);
+  color: var(--sat-text);
+  font: 700 10px var(--font-sans);
+  letter-spacing: 0.09em;
+  line-height: 1;
+  cursor: pointer;
+}
+.key:hover:not(:disabled) {
+  border-color: var(--sat-brass-dim);
+}
+.key:focus-visible {
+  outline: 2px solid var(--sat-brass);
+  outline-offset: 1px;
+}
+.key:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+.key.on {
+  background: linear-gradient(180deg, #4a3c1c, #362b12);
+  border-color: var(--sat-brass);
+  color: var(--sat-brass);
+}
+
+/* ----------------------------------------------------------- alias strip */
+/*
+ * The headline. It is never behind a tab and never abbreviated away, because
+ * it is the reason the plug-in exists: one number, live, that holds while
+ * the naive path climbs.
+ */
+.measure {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+/*
+ * **A definite height, and it matters.** The history strip is a canvas that
+ * fills its box; in a row sized by its content it has no box to fill and
+ * falls back to its own intrinsic height, which made the strip twice as tall
+ * as anything in it. Pinning the row is what gives the canvas something to
+ * resolve against, and it is the right call anyway: this is an instrument's
+ * readout and it should not change size when a number gains a digit.
+ */
+.alias {
+  flex: 0 0 auto;
+  height: 104px;
+  display: grid;
+  grid-template-columns: minmax(210px, 244px) minmax(232px, 292px) 1fr;
+  /*
+   * One row, exactly the content box. Sized `auto` the row grew to the
+   * canvas's intrinsic height and the history spilled over the alignment
+   * line below it; `minmax(0, 1fr)` is what makes `height: 100%` inside
+   * resolve, and `overflow: hidden` is the belt to that brace.
+   */
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  gap: 14px;
+  padding: 8px 12px 6px;
+}
+.alias__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.alias__cap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 800 9px var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+/* the mark that says nothing on this strip is a measurement */
+.alias__stamp {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--sat-naive);
+  border: 1px solid rgba(224, 122, 74, 0.5);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.alias__big {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 1px;
+}
+.alias__num {
+  font: 300 40px/1 var(--font-mono);
+  letter-spacing: -0.02em;
+  color: var(--sat-trace);
+  text-shadow: 0 0 16px rgba(94, 226, 160, 0.35);
+}
+.alias__big--dark .alias__num {
+  color: var(--sat-text-faint);
+  text-shadow: none;
+}
+/*
+ * The figure greys out when the input is not periodic enough for it to mean
+ * anything. That is the whole reason the engine publishes a confidence, and
+ * it is the difference between a headline feature and one that lies on a drum
+ * loop: what is on screen has to stop looking like a measurement the moment
+ * it stops being one.
+ */
+.alias__big.is-idle .alias__num {
+  color: var(--sat-text-faint);
+  text-shadow: none;
+}
+.alias__big.is-idle .alias__unit {
+  color: var(--sat-text-faint);
+}
+.alias.is-idle .alias__cond {
+  color: var(--sat-naive);
+}
+.alias__unit {
+  font: 600 12px var(--font-mono);
+  color: var(--sat-trace-dim);
+}
+.alias__cond {
+  margin-top: auto;
+  font-size: 9.5px;
+  line-height: 1.28;
+  color: var(--sat-text-dim);
+  /*
+   * Two lines, then clipped. The conditions a measurement was made under are
+   * part of the measurement, so they get the room to be read; an ellipsis
+   * after "below 1…" was worse than nothing.
+   */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.alias__compare {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 1px solid var(--sat-edge);
+  padding-left: 14px;
+  min-width: 0;
+}
+.alias__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.alias__k {
+  font-size: 10.5px;
+  color: var(--sat-text-dim);
+}
+.alias__v {
+  font: 500 12.5px var(--font-mono);
+  color: var(--sat-text);
+  white-space: nowrap;
+}
+.alias__v--naive {
+  color: var(--sat-naive);
+}
+.alias__v--thd {
+  color: var(--sat-brass);
+}
+/* the periodicity bar, with a tick where the readout starts meaning something */
+.alias__row--bar {
+  gap: 8px;
+}
+.alias__bar {
+  position: relative;
+  flex: 1;
+  min-width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(226, 232, 222, 0.1);
+  overflow: hidden;
+}
+.alias__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--sat-trace);
+}
+.alias__bar.is-under .alias__fill {
+  background: var(--sat-naive);
+}
+.alias__floor {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--sat-text-dim);
+}
+.alias__foot {
+  margin: auto 0 0;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--sat-text-faint);
+}
+.alias__history {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--sat-edge);
+  padding-left: 14px;
+  min-height: 0;
+}
+.alias__histcap {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font: 700 8.5px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sat-text-faint);
+  margin-bottom: 4px;
+}
+.alias__key {
+  letter-spacing: 0.1em;
+}
+.alias__key::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: currentcolor;
+}
+.alias__key--ours {
+  color: var(--sat-trace);
+  margin-left: auto;
+}
+.alias__key--thd {
+  color: var(--sat-brass);
+}
+.alias__histbox {
+  flex: 1;
+  min-height: 0;
+  border-radius: 4px;
+  background: var(--sat-glass);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.alias__dark {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 10.5px;
+  color: var(--sat-text-faint);
+}
+
+/* -------------------------------------------------------------- the stage */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+/*
+ * The keys sit in the pane's own caption row rather than above it. The
+ * caption is one short line with the whole width to its right, so the keys
+ * cost nothing there — and a row of tabs above the display cost 31 px, which
+ * at the 520 px minimum is most of the difference between a readable
+ * transfer plot and an unreadable one.
+ */
+.stage__tabs {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+.tab {
+  padding: 3px 11px;
+  border-radius: 4px;
+  border: 1px solid var(--sat-edge);
+  background: linear-gradient(180deg, #222724, #191d1b);
+  color: var(--sat-text-dim);
+  font: 700 10px var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tab.on {
+  color: var(--sat-brass);
+  border-color: var(--sat-brass-dim);
+  background: linear-gradient(180deg, #322a17, #23201a);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--sat-brass);
+  outline-offset: 1px;
+}
+.stage__panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 9px;
+}
+.pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
+}
+.pane__cap {
+  flex: 0 0 auto;
+  /* room on the right for the stage keys, which sit in this row */
+  padding-right: 146px;
+  margin: 0 0 7px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font: 800 9px var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+.pane__cap span {
+  font: 400 10px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sat-text-faint);
+}
+/* one pane at a time while the window is small; the key picks which */
+.stage--shape .pane--colour,
+.stage--colour .pane--shape {
+  display: none;
+}
+/*
+ * A window with room for both shows both and the keys go away. Pure CSS on
+ * the window size: nothing measures anything, so a resize drag does not
+ * thrash the layout.
+ */
+@media (min-width: 1460px) and (min-height: 700px) {
+  .stage--shape .pane--colour,
+  .stage--colour .pane--shape {
+    display: flex;
+  }
+  .stage__tabs {
+    display: none;
+  }
+  .pane__cap {
+    padding-right: 0;
+  }
+}
+
+/* ------------------------------------------------------ transfer display */
+.shape {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+.shape__plot {
+  flex: 0 0 auto;
+  /* square, so the dashed unity line is a true 45 degrees */
+  aspect-ratio: 1;
+  height: 100%;
+  max-width: 100%;
+  border-radius: 4px;
+  background: radial-gradient(120% 120% at 50% 0%, var(--sat-glass-hi), var(--sat-glass));
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+.shape__canvas,
+.colour__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.shape__side {
+  flex: 1;
+  min-width: 0;
+  /*
+   * Scrolls rather than clips. A curve's note is two lines for four of the
+   * five and three for the wavefolder, and at the 520 px minimum the third
+   * line fell off the plate mid-sentence. Truncated prose on a panel whose
+   * argument is that it publishes what other devices do not is the wrong
+   * trade; a few pixels of scroll is the right one.
+   */
+  overflow-y: auto;
+  /*
+   * The plot is square and therefore height-bound, so in a short wide pane
+   * the column beside it would otherwise stretch to eight hundred pixels of
+   * mostly nothing. Capped, the pair reads as a display with its legend.
+   */
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shape__name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.shape__curve {
+  font: 700 15px var(--font-sans);
+  letter-spacing: 0.05em;
+  color: var(--sat-brass);
+}
+.shape__sub {
+  font-size: 11px;
+  color: var(--sat-text-faint);
+}
+/* the equations, on glass, because they are the thing no Ableton document prints */
+.shape__eq {
+  border-radius: 4px;
+  border: 1px solid var(--sat-edge);
+  background: var(--sat-glass);
+  padding: 6px 9px;
+}
+/*
+ * Equations wrap; they never scroll sideways. A horizontal scrollbar through
+ * an equation is a worse outcome than a second line, and Clip — the one
+ * curve here with a parameter — needs three lines to write honestly whatever
+ * the box is doing.
+ */
+.shape__eqline {
+  font: 400 12px/1.5 var(--font-mono);
+  color: var(--sat-trace);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  /* a hanging indent, so a wrapped continuation cannot be read as a new equation */
+  padding-left: 2.4em;
+  text-indent: -2.4em;
+}
+.shape__eqline--anti {
+  color: var(--sat-brass);
+}
+.shape__eqline--none {
+  color: var(--sat-naive);
+}
+.shape__note,
+.shape__why,
+.shape__caption,
+.shape__warn {
+  margin: 0;
+  max-width: 64ch;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sat-text-dim);
+}
+.shape__why,
+.shape__caption {
+  font-size: 10px;
+  color: var(--sat-text-faint);
+}
+.shape__warn {
+  color: var(--sat-naive);
+}
+
+/* -------------------------------------------------------- colour display */
+.colour {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+.colour__plot {
+  position: relative;
+  flex: 1 1 62%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 4px;
+  background: radial-gradient(120% 120% at 50% 0%, var(--sat-glass-hi), var(--sat-glass));
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+.colour__key {
+  position: absolute;
+  top: 5px;
+  left: 34px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  font: 400 9px var(--font-mono);
+  pointer-events: none;
+}
+.colour__k::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.colour__k--fwd {
+  color: var(--sat-brass);
+}
+.colour__k--fwd::before {
+  background: var(--sat-brass);
+}
+.colour__k--inv {
+  color: var(--sat-inverse);
+}
+.colour__k--inv::before {
+  background: repeating-linear-gradient(90deg, var(--sat-inverse) 0 3px, transparent 3px 5px);
+}
+.colour__k--in {
+  color: var(--sat-spec-in);
+}
+.colour__k--in::before {
+  background: var(--sat-spec-in);
+}
+.colour__k--out {
+  color: var(--sat-spec-out);
+}
+.colour__k--out::before {
+  background: var(--sat-spec-out);
+}
+.colour__k--off {
+  color: var(--sat-naive);
+}
+.colour__k--off::before {
+  display: none;
+}
+.colour__side {
+  flex: 1 1 38%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+.colour__head {
+  font: 700 12px var(--font-sans);
+  color: var(--sat-brass);
+}
+.colour__note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sat-text-dim);
+}
+.colour__facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 1px 10px;
+  font: 400 11px var(--font-mono);
+}
+.colour__facts dt {
+  color: var(--sat-text-faint);
+}
+.colour__facts dd {
+  margin: 0;
+  color: var(--sat-text);
+}
+.colour__caption {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--sat-text-faint);
+}
+.colour__warn {
+  margin: 0;
+  font-size: 10px;
+  color: var(--sat-naive);
+}
+/*
+ * Dim rather than orange. A missing stream that the engine never promised is
+ * a gap in the design, worth saying once; it is not a fault in this build and
+ * should not shout like one.
+ */
+.colour__gap {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--sat-text-faint);
+}
+
+/* --------------------------------------------------------- alignment bar */
+/*
+ * The alignment line shares the measurement plate with the alias strip
+ * above it, because the two are one argument and because a separate plate
+ * for six numbers cost a whole row of a 520 px window.
+ */
+.align {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 5px 12px 7px;
+  border-top: 1px solid var(--sat-edge);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 0 0 6px 6px;
+}
+.align__cap {
+  font: 800 9px var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+.align__pair {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.align__pair i {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--sat-text-faint);
+}
+.align__pair b {
+  font: 500 12px var(--font-mono);
+  color: var(--sat-text);
+}
+.align__eq {
+  font: 400 13px var(--font-mono);
+  color: var(--sat-text-faint);
+  margin: 0 -8px;
+}
+.align__ms {
+  color: var(--sat-text-dim);
+  font-weight: 400;
+}
+/*
+ * The claim, said in words, with the numbers after it. There is deliberately
+ * no lamp: a green tick beside two numbers invites the reading that they were
+ * compared and happened to agree, and they are equal by construction. The
+ * fault state exists only so that a build where they somehow differ is
+ * visible, and it says "engine fault" rather than dressing itself up as a
+ * routine comparison that came out the other way.
+ */
+.align__claim {
+  font-size: 10.5px;
+  color: var(--sat-trace);
+}
+.align.is-fault .align__claim {
+  color: var(--sat-naive);
+}
+.align__claim b {
+  font-weight: 700;
+}
+.align__excl {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--sat-text-faint);
+}
+
+/* ---------------------------------------------------------------- the deck */
+.deck {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 9px;
+  align-items: stretch;
+}
+.deck__group {
+  padding: 6px 12px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/*
+ * Every group takes a share of the width and centres its controls in it.
+ * Letting one group absorb the slack instead pushed the right-hand group off
+ * the edge of a 900 px window, and left voids between the groups on a wide
+ * one; sharing does neither.
+ */
+.deck__group {
+  flex: 1 1 auto;
+}
+.deck__group.is-off .deck__row {
+  opacity: 0.42;
+}
+.deck__head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 800 9px var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+.deck__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 14px;
+}
+.deck__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 6px;
+}
+.deck__stack--mix {
+  flex-direction: column;
+  padding-top: 0;
+  gap: 5px;
+}
+.deck__cap {
+  font: 700 8.5px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+  white-space: nowrap;
+}
+.deck__hint {
+  max-width: 128px;
+  text-align: center;
+  font-size: 9px;
+  line-height: 1.3;
+  color: var(--sat-text-faint);
+}
+
+/* ---------------------------------------------------------------- the knob */
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+/*
+ * The dial's box carries the size; the column around it does not. Sized the
+ * other way round, a two-word hint under a 44 px knob wrapped one word per
+ * line and the deck grew a stripe of ragged text under every control.
+ */
+.knob__dial-box {
+  width: var(--knob-size, 58px);
+}
+.knob__dial {
+  display: block;
+  width: 100%;
+  cursor: ns-resize;
+  overflow: visible;
+}
+.knob__dial:focus-visible {
+  outline: 2px solid var(--sat-brass);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+.knob.is-off {
+  /* dimmed, not illegible: a disabled control still has to say why it is off */
+  opacity: 0.48;
+}
+.knob.is-off .knob__dial {
+  cursor: default;
+}
+.knob__marks line {
+  stroke: var(--sat-text-faint);
+  stroke-width: 1.4;
+}
+.knob__marks line.long {
+  stroke: var(--sat-text-dim);
+  stroke-width: 2;
+}
+.knob__track {
+  fill: none;
+  stroke: rgba(226, 232, 222, 0.12);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+.knob__value {
+  fill: none;
+  stroke: var(--sat-brass);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+.knob.is-live .knob__value {
+  filter: drop-shadow(0 0 3px rgba(217, 164, 65, 0.7));
+}
+.knob__bezel {
+  fill: none;
+  stroke: rgba(217, 164, 65, 0.5);
+  stroke-width: 1.6;
+}
+.knob__cap {
+  fill: #141715;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 1;
+}
+.knob__crown {
+  fill: none;
+  stroke: rgba(226, 232, 222, 0.09);
+  stroke-width: 1;
+}
+.knob__index {
+  fill: var(--sat-signal);
+}
+.knob__label {
+  margin-top: 2px;
+  white-space: nowrap;
+  font: 700 8.5px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+.knob__value-text {
+  font: 400 11px var(--font-mono);
+  color: var(--sat-text);
+}
+.knob__hint {
+  max-width: 88px;
+  text-align: center;
+  font-size: 8.5px;
+  line-height: 1.3;
+  color: var(--sat-text-faint);
+}
+
+/* ------------------------------- the framework's switches, dressed as keys */
+/*
+ * `Segmented` and `Toggle` ship unstyled on purpose — the framework holds no
+ * look — so the panel's own lit keys are defined once here and every switch
+ * on the deck wears them.
+ */
+.keys.noob-vst-webgui-framework-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--sat-glass);
+  border: 1px solid var(--sat-edge);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+.keys .noob-vst-webgui-framework-segment {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sat-text-dim);
+  font: 700 10px var(--font-sans);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.keys .noob-vst-webgui-framework-segment:hover {
+  color: var(--sat-text);
+}
+.keys .noob-vst-webgui-framework-segment:focus-visible {
+  outline: 2px solid var(--sat-brass);
+  outline-offset: -1px;
+}
+.keys .noob-vst-webgui-framework-segment.is-on {
+  background: linear-gradient(180deg, #4a3c1c, #362b12);
+  color: var(--sat-brass);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.keys--law .noob-vst-webgui-framework-segment {
+  padding: 4px 7px;
+  font-size: 9px;
+}
+.keys--lamp.noob-vst-webgui-framework-toggle.button {
+  padding: 3px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--sat-edge-hi);
+  background: linear-gradient(180deg, #2d322f, #1e2321);
+  color: var(--sat-text-faint);
+  font: 700 9px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.keys--lamp.noob-vst-webgui-framework-toggle.button.is-on {
+  background: linear-gradient(180deg, #1d4634, #143024);
+  border-color: rgba(94, 226, 160, 0.55);
+  color: var(--sat-trace);
+  box-shadow: 0 0 8px rgba(94, 226, 160, 0.22);
+}
+.keys--lamp.noob-vst-webgui-framework-toggle.button:focus-visible {
+  outline: 2px solid var(--sat-brass);
+  outline-offset: 1px;
+}
+
+/*
+ * A thin, quiet scrollbar wherever this page can scroll. Width is not
+ * cosmetic here: the deck fits across a 900 px window with about ten pixels
+ * to spare, and a platform scrollbar at fifteen took the oversampling keys
+ * off the edge the moment anything made the body scroll.
+ */
+.sat__body::-webkit-scrollbar,
+.shape__side::-webkit-scrollbar,
+.colour__side::-webkit-scrollbar {
+  width: 6px;
+}
+.sat__body::-webkit-scrollbar-thumb,
+.shape__side::-webkit-scrollbar-thumb,
+.colour__side::-webkit-scrollbar-thumb {
+  background: rgba(226, 232, 222, 0.14);
+  border-radius: 3px;
+}
+.sat__body::-webkit-scrollbar-track,
+.shape__side::-webkit-scrollbar-track,
+.colour__side::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------- the bench */
+.bench {
+  flex: 0 0 auto;
+  padding: 9px 11px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bench__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 9px;
+}
+.bench__card {
+  border: 1px solid var(--sat-edge);
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.bench__card.is-warn {
+  border-color: rgba(224, 122, 74, 0.45);
+}
+.bench__card h4 {
+  margin: 0 0 5px;
+  font: 700 9px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sat-text-dim);
+}
+.bench__card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 1px 10px;
+  font: 400 11px var(--font-mono);
+}
+.bench__card dt {
+  color: var(--sat-text-faint);
+}
+.bench__card dd {
+  margin: 0;
+  color: var(--sat-text);
+}
+.bench__card dd.wrap {
+  word-break: break-all;
+}
+.bench__note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sat-text-dim);
+}
+.bench__note code {
+  font: 400 10.5px var(--font-mono);
+  color: var(--sat-brass);
+}
+.bench__table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 400 11px var(--font-mono);
+}
+.bench__table th {
+  text-align: left;
+  font: 700 9px var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sat-text-faint);
+  padding: 2px 10px 4px 0;
+  border-bottom: 1px solid var(--sat-edge);
+}
+.bench__table td {
+  padding: 2px 10px 2px 0;
+  color: var(--sat-text);
+  border-bottom: 1px solid rgba(226, 232, 222, 0.04);
+}
+.bench__table td.dim {
+  color: var(--sat-text-dim);
+}
+
+/* ------------------------------------------------------- small windows */
+/*
+ * The panel has to stay usable at the 900 x 520 minimum the plug-in can be
+ * dragged to. What gives is spacing and the length of the explanatory prose,
+ * never the reading size of a number: the figures on this panel are the
+ * point of it, and small type is the fault this project rejects most often.
+ */
+@media (max-height: 620px) {
+  .sat__body {
+    gap: 7px;
+    padding: 7px 9px 9px;
+  }
+  .alias {
+    height: 92px;
+    padding: 6px 11px 5px;
+  }
+  .alias__num {
+    font-size: 31px;
+  }
+  .alias__foot {
+    display: none;
+  }
+  .alias__histcap {
+    /* the caption goes, the key stays: an unlabelled two-colour chart is a puzzle */
+    font-size: 8px;
+    margin-bottom: 2px;
+  }
+  .alias__histcap > span:first-child {
+    display: none;
+  }
+  .stage {
+    min-height: 168px;
+  }
+  /*
+   * Only the aside about how the scheme works goes. The two captions stay at
+   * every size: one says what the transfer plot excludes and the other says
+   * that the colour display has not measured the null it draws. A panel does
+   * not get to drop the sentence that keeps it honest because the window got
+   * shorter — the column beside each display scrolls instead.
+   */
+  .shape__why {
+    display: none;
+  }
+  /*
+   * A short window makes the plot small and leaves the column beside it
+   * wide, so the prose is allowed to run wider there. The alternative was a
+   * scrollbar next to two hundred pixels of empty plate.
+   */
+  .shape__side {
+    max-width: none;
+  }
+  .shape__note,
+  .shape__caption,
+  .shape__warn {
+    max-width: 96ch;
+  }
+  .deck__group {
+    padding: 5px 10px 7px;
+  }
+  .deck__row {
+    gap: 11px;
+  }
+}
+@media (max-height: 560px) {
+  /*
+   * The smallest window this plug-in opens at. The displays keep every line
+   * of what they say; what gives is the padding around them, which is how a
+   * 520 px panel stays a panel rather than a scrolling document.
+   */
+  .pane {
+    padding: 6px 9px 8px;
+  }
+  .pane__cap {
+    margin-bottom: 4px;
+  }
+  .shape,
+  .colour {
+    gap: 9px;
+  }
+  .shape__side,
+  .colour__side {
+    gap: 4px;
+  }
+  .shape__eq {
+    padding: 4px 8px;
+  }
+  .shape__eqline {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+  .knob__hint,
+  .deck__hint {
+    display: none;
+  }
+  .alias {
+    height: 88px;
+  }
+  .stage {
+    /* the displays yield before the page starts to scroll */
+    min-height: 150px;
+  }
+  .deck {
+    --knob-scale: 0.68;
+  }
+  .deck__group {
+    padding: 3px 8px 5px;
+  }
+  .deck__stack {
+    padding-top: 3px;
+  }
+  .knob__value-text {
+    font-size: 10px;
+  }
+}
+/*
+ * At the narrow end the three columns tighten rather than dropping one. The
+ * history strip in particular stays: "turn the drive up and watch it hold"
+ * is the demonstration, and it cannot be made at a window size by taking the
+ * demonstration away.
+ */
+/*
+ * The deck holds every parameter on one row given the width for it, and the
+ * whole set does not fit across 900 px at full size. So at the narrow end it
+ * shrinks — one scale factor for every knob, which keeps the size hierarchy
+ * saying which control matters, and tighter keys — rather than wrapping into
+ * a second row, because at the 520 px minimum a second deck row costs the
+ * transfer display more than it is worth.
+ */
+@media (max-width: 1180px) {
+  .alias {
+    grid-template-columns: minmax(186px, 206px) minmax(200px, 236px) 1fr;
+    gap: 11px;
+  }
+  .alias__compare,
+  .alias__history {
+    padding-left: 11px;
+  }
+  .alias__num {
+    font-size: 34px;
+  }
+  .bar__sub {
+    display: none;
+  }
+  .deck {
+    --knob-scale: 0.74;
+    gap: 6px;
+  }
+  /* a hint under a knob needs a wider column than the deck has to spare here */
+  .knob__hint {
+    display: none;
+  }
+  .deck__group {
+    padding: 5px 6px 7px;
+  }
+  .deck__row {
+    gap: 8px;
+  }
+  /*
+   * The mix law stacks instead of sitting side by side. Two full words are
+   * the widest thing on the shaper group and "Equal power" was wrapping
+   * anyway, so the column costs no height and gives back about twenty-five
+   * pixels — and the alternative, abbreviating the labels, is the fault this
+   * panel is built to avoid.
+   */
+  .keys--law.noob-vst-webgui-framework-segmented {
+    flex-direction: column;
+  }
+  .keys--law .noob-vst-webgui-framework-segment {
+    white-space: nowrap;
+    text-align: center;
+  }
+  .sat__body {
+    padding: 7px 8px 9px;
+  }
+  /* the longest caption on the deck is OVERSAMPLE, and at the narrow end it
+     is the last ten pixels that decide whether the group fits */
+  .deck__cap {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+  .deck__head {
+    letter-spacing: 0.14em;
+  }
+  .keys .noob-vst-webgui-framework-segment {
+    padding: 4px 5px;
+    font-size: 8.5px;
+    letter-spacing: 0.02em;
+  }
+  /*
+   * The curve menu wraps to two rows of three at the narrow end. Six keys in
+   * a line is the widest single item on the deck and it was pushing the
+   * oversampling keys — the control that carries "every setting is
+   * antialiased" — off the right-hand edge of a 900 px window. Two rows cost
+   * no height, because the shaper group is already as tall as its knobs, and
+   * all six stay visible, which a dropdown would not manage.
+   */
+  .keys--curve.noob-vst-webgui-framework-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .keys--curve .noob-vst-webgui-framework-segment {
+    padding: 4px 3px;
+  }
+  .keys--law .noob-vst-webgui-framework-segment {
+    padding: 3px 4px;
+    font-size: 8.5px;
+  }
+  .keys--lamp.noob-vst-webgui-framework-toggle.button {
+    padding: 3px 7px;
+    letter-spacing: 0.1em;
+  }
+  .knob__label {
+    letter-spacing: 0.1em;
+  }
+}
