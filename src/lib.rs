@@ -2,12 +2,14 @@
 //! noob-vst-webgui-framework with a browser-rendered front panel.
 //!
 //! It is an affectionate spoof of Ableton Live's Saturator, and it is not a
-//! parity replacement or a clone. It competes on four things, all of them
-//! demonstrable rather than matters of taste: **lower aliasing**, a
-//! **dry/wet control that sums without combing** because its dry path is
-//! delayed to match the wet one, **quality always on** rather than hidden
-//! behind a switch, and **latency reported honestly** to the host and
-//! compensated internally.
+//! parity replacement or a clone. It stands on four things, all of them
+//! demonstrable here rather than matters of taste: **aliasing measured and
+//! stated on the face**, a **dry/wet control that sums without combing**
+//! because its dry path is delayed to match the wet one, **quality always on**
+//! rather than hidden behind a switch, and **latency reported honestly** to
+//! the host and compensated internally. All four are properties of this
+//! device, measured on this device; none of them is a comparison, because
+//! there is no measurement of anyone else's to compare against.
 //!
 //! The curves are ours. We do not copy theirs — they are unverifiable, they
 //! are not modelled on anything, and "sounds like Saturator" is a taste

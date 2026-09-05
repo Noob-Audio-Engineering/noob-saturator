@@ -23,7 +23,7 @@ accent = "#e8b04b"
 tagline = "An antialiased waveshaper with a latency-matched dry path and a live aliasing readout."
 features = [
     "Six curves, each shipped with its own transfer function and antiderivative",
-    "Antiderivative antialiasing measured at -85 dB or better, worst case",
+    "Antiderivative antialiasing: -85 dB worst case at the expected drive, and the end of the drive control measured and published too",
     "A dry path matched to the wet one within 0.05 dB",
     "The aliasing figure on the face, measured on the signal passing through",
     "Sixteen-times oversampling with a stated, whole-sample latency",
